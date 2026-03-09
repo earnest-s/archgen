@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://architectai/schemas/architecture.schema.json",
+  "title": "Architecture",
+  "description": "Schema for a software architecture diagram used across the ArchitectAI pipeline. Compatible with FastAPI response serialization, React Flow diagram editing, diagram generation, and training dataset generation.",
+  "type": "object",
+  "required": ["nodes", "edges", "metadata"],
+  "additionalProperties": false,
+  "properties": {
+    "nodes": {
+      "description": "List of architectural components (nodes) in the diagram. Each node must have a unique id.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Node"
+      }
+    },
+    "edges": {
+      "description": "List of directed connections between nodes. Each edge references existing node ids.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Edge"
+      }
+    },
+    "metadata": {
+      "$ref": "#/$defs/Metadata"
+    }
+  },
+  "$defs": {
+    "NodeType": {
+      "title": "NodeType",
+      "description": "The architectural role of a node within the system diagram.",
+      "type": "string",
+      "enum": [
+        "Frontend",
+        "Backend",
+        "Service",
+        "Database",
+        "Cache",
+        "Queue",
+        "External"
+      ]
+    },
+    "Node": {
+      "title": "Node",
+      "description": "A single component in the architecture diagram (e.g. a service, database, or UI layer).",
+      "type": "object",
+      "required": ["id", "type", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Unique identifier for the node. Referenced by edges using 'from' and 'to' fields.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "examples": ["api_gateway", "user_db", "auth_service"]
+        },
+        "type": {
+          "$ref": "#/$defs/NodeType"
+        },
+        "label": {
+          "description": "Human-readable display name for the node as rendered in the diagram.",
+          "type": "string",
+          "minLength": 1,
+          "examples": ["API Gateway", "User Database", "Auth Service"]
+        },
+        "layer": {
+          "description": "Optional logical grouping layer (e.g. 'Presentation', 'Application', 'Data'). Used for vertical diagram layout and React Flow grouping.",
+          "type": "string",
+          "minLength": 1,
+          "examples": ["Presentation", "Application", "Data", "Infrastructure"]
+        }
+      }
+    },
+    "Edge": {
+      "title": "Edge",
+      "description": "A directed connection between two nodes in the architecture diagram.",
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "The id of the source node. Must reference an existing node id.",
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "description": "The id of the target node. Must reference an existing node id.",
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol": {
+          "description": "Optional communication protocol used on this connection.",
+          "type": "string",
+          "minLength": 1,
+          "examples": ["HTTP", "HTTPS", "gRPC", "TCP", "WebSocket", "AMQP", "SQL"]
+        }
+      }
+    },
+    "Metadata": {
+      "title": "Metadata",
+      "description": "Diagram-level metadata controlling rendering style and schema versioning.",
+      "type": "object",
+      "required": ["version"],
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "description": "Optional visual style hint for the diagram renderer (e.g. 'dark', 'light', 'blueprint').",
+          "type": "string",
+          "minLength": 1,
+          "examples": ["light", "dark", "blueprint", "minimal"]
+        },
+        "version": {
+          "description": "Schema version number. Increment when the structure changes in a breaking way. Defaults to 1.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "examples": [1, 2]
+        }
+      }
+    }
+  }
+}
