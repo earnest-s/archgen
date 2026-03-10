@@ -114,64 +114,58 @@ def check_qwen_lora(path: Path) -> str:
 
 def check_imports() -> str:
     # These must import without error
-    from backend.core.prompt_parser.parser import PromptParser  # noqa: F401
-    from backend.core.diagram.generator    import DiagramGenerator  # noqa: F401
-    from backend.core.vlm.explainer        import ArchitectureExplainer  # noqa: F401
-    return "prompt_parser, diagram.generator, vlm.explainer"
+    from backend.core.prompt_parser.parser import parse_prompt              # noqa: F401
+    from backend.core.diagram.generator   import generate_diagram_to_tmpfile  # noqa: F401
+    from backend.core.vlm.explainer       import generate_explanation_rule_based  # noqa: F401
+    return "parse_prompt, generate_diagram_to_tmpfile, generate_explanation_rule_based"
 
 
 def check_parser() -> str:
-    from backend.core.prompt_parser.parser import PromptParser
-    parser = PromptParser()
-    arch   = parser.parse("Design a three-tier web app with React, FastAPI, and PostgreSQL.")
-    nodes  = arch.get("nodes") or arch.get("components") or []
+    from backend.core.prompt_parser.parser import parse_prompt
+    arch  = parse_prompt("Design a three-tier web app with React, FastAPI, and PostgreSQL.")
+    nodes = arch.nodes
     if not nodes:
         raise ValueError(f"Parser returned no nodes: {arch}")
     return f"({len(nodes)} nodes parsed)"
 
 
 def check_diagram_generator() -> str:
-    from backend.core.prompt_parser.parser import PromptParser
-    from backend.core.diagram.generator   import DiagramGenerator
+    import tempfile, os
+    from backend.core.prompt_parser.parser import parse_prompt
+    from backend.core.diagram.generator   import generate_diagram
 
-    parser    = PromptParser()
-    arch      = parser.parse("Design a REST API with FastAPI and PostgreSQL.")
-    generator = DiagramGenerator()
-    result    = generator.generate(arch)
-
-    # Result may be bytes (PNG), a path string, or a dict with 'diagram'
-    if isinstance(result, bytes) and len(result) > 0:
-        return f"(PNG, {len(result):,} bytes)"
-    if isinstance(result, str) and Path(result).exists():
-        return f"(file: {result})"
-    if isinstance(result, dict):
-        nodes = result.get("nodes") or []
-        return f"(layout dict, {len(nodes)} nodes)"
-    raise ValueError(f"Unexpected generator output: {type(result)}")
+    arch   = parse_prompt("Design a REST API with FastAPI and PostgreSQL.")
+    with tempfile.TemporaryDirectory() as tmp:
+        out_base = os.path.join(tmp, "verify_test")
+        png_path = generate_diagram(arch, out_base)
+        if not Path(png_path).exists():
+            raise ValueError(f"PNG not created at {png_path}")
+        size = Path(png_path).stat().st_size
+    return f"(PNG, {size:,} bytes)"
 
 
 def check_vision_encoder() -> str:
-    import torch
-    from backend.core.vision.encoder import VisionEncoder
+    import tempfile, os
+    from backend.core.prompt_parser.parser import parse_prompt
+    from backend.core.diagram.generator   import generate_diagram
+    from backend.core.vision.encoder      import encode_diagram
 
-    enc  = VisionEncoder()
-    # Create a fake 224×224 RGB image tensor (batch=1)
-    img  = torch.zeros(1, 3, 224, 224)
-    with torch.no_grad():
-        emb = enc(img)
+    # Generate a real PNG, then encode it
+    arch = parse_prompt("FastAPI backend connected to PostgreSQL.")
+    with tempfile.TemporaryDirectory() as tmp:
+        png_path = generate_diagram(arch, os.path.join(tmp, "enc_test"))
+        emb = encode_diagram(png_path)
     if emb.shape[-1] != 768:
         raise ValueError(f"Expected 768-dim embedding, got {emb.shape[-1]}")
     return f"(shape {tuple(emb.shape)})"
 
 
 def check_explainer() -> str:
-    from backend.core.prompt_parser.parser import PromptParser
-    from backend.core.vlm.explainer        import ArchitectureExplainer
+    from backend.core.prompt_parser.parser import parse_prompt
+    from backend.core.vlm.explainer        import generate_explanation_rule_based
 
-    parser  = PromptParser()
-    arch    = parser.parse("React frontend connected to FastAPI and Redis cache.")
-    exp     = ArchitectureExplainer(use_llm=False)  # rule-based only
-    text    = exp.explain(arch)
+    arch = parse_prompt("React frontend connected to FastAPI and Redis cache.")
+    text = generate_explanation_rule_based(arch)
     if not text or len(text.strip()) < 20:
         raise ValueError(f"Explanation too short: {repr(text)}")
     return f"({len(text)} chars)"
