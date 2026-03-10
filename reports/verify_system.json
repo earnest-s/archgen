@@ -1,0 +1,65 @@
+{
+  "n_total": 8,
+  "n_passed": 0,
+  "n_failed": 8,
+  "all_pass": false,
+  "wall_s": 2.938,
+  "checks": [
+    {
+      "name": "Dataset file exists",
+      "status": "FAIL",
+      "elapsed_s": 0.0,
+      "detail": null,
+      "error": "Not found: data/synthetic/dataset.jsonl"
+    },
+    {
+      "name": "ConvNeXt checkpoint exists",
+      "status": "FAIL",
+      "elapsed_s": 0.0,
+      "detail": null,
+      "error": "Not found: checkpoints/convnext/convnext_best.pt"
+    },
+    {
+      "name": "Qwen LoRA adapter exists",
+      "status": "FAIL",
+      "elapsed_s": 0.0,
+      "detail": null,
+      "error": "Not found: checkpoints/qwen_lora/lora_adapter"
+    },
+    {
+      "name": "Backend imports resolve",
+      "status": "FAIL",
+      "elapsed_s": 0.1273,
+      "detail": null,
+      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+    },
+    {
+      "name": "Prompt parser produces nodes",
+      "status": "FAIL",
+      "elapsed_s": 0.0,
+      "detail": null,
+      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+    },
+    {
+      "name": "Diagram generator produces output",
+      "status": "FAIL",
+      "elapsed_s": 0.0,
+      "detail": null,
+      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+    },
+    {
+      "name": "Vision encoder \u2192 768-dim embedding",
+      "status": "FAIL",
+      "elapsed_s": 2.8106,
+      "detail": null,
+      "error": "cannot import name 'VisionEncoder' from 'backend.core.vision.encoder' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/vision/encoder.py)"
+    },
+    {
+      "name": "Rule-based explainer produces text",
+      "status": "FAIL",
+      "elapsed_s": 0.0,
+      "detail": null,
+      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+    }
+  ]
+}
