@@ -17,6 +17,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.routes.explain import router as explain_router
 from backend.api.routes.generate_diagram import router as generate_diagram_router
 from backend.api.routes.full_pipeline import router as full_pipeline_router
 from backend.api.routes.parse_prompt import router as parse_prompt_router
@@ -70,6 +71,7 @@ app.add_middleware(
 app.include_router(parse_prompt_router)
 app.include_router(generate_diagram_router)
 app.include_router(full_pipeline_router)
+app.include_router(explain_router)
 
 
 # ---------------------------------------------------------------------------
