@@ -15,11 +15,13 @@ Public API::
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Optional
 
 import torch
 
 from backend.api.schemas.architecture import Architecture
+from backend.core.vlm.projector import VisionProjector
 from backend.core.vlm.qwen_loader import load_qwen
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,22 @@ Architecture:
 {arch_json}
 
 Write a 2-4 sentence plain-English explanation of this architecture.
+Focus on: overall pattern, component roles, and how data flows through the system.
+"""
+
+# Used when ConvNeXt vision features are available.
+_USER_TEMPLATE_WITH_VISION = """\
+Below is a description of a software architecture diagram, along with a visual
+analysis derived from the diagram image using a ConvNeXt vision encoder.
+
+Architecture:
+{arch_json}
+
+Diagram Visual Context (ConvNeXt analysis):
+{vision_context}
+
+Based on both the structural description and the visual analysis of the diagram,
+write a 2-4 sentence plain-English explanation of this architecture.
 Focus on: overall pattern, component roles, and how data flows through the system.
 """
 
@@ -68,12 +86,62 @@ def _architecture_to_text(arch: Architecture) -> str:
 
 
 def _build_messages(arch: Architecture) -> list[dict[str, str]]:
-    """Build the chat message list for the Qwen instruct model."""
+    """Build the chat message list for the Qwen instruct model (text-only)."""
     arch_text = _architecture_to_text(arch)
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user",   "content": _USER_TEMPLATE.format(arch_json=arch_text)},
     ]
+
+
+@lru_cache(maxsize=1)
+def _get_projector() -> VisionProjector:
+    """Return a cached VisionProjector (randomly initialised unless a
+    checkpoint is loaded externally before the first call).
+    """
+    proj = VisionProjector()
+    proj.eval()
+    logger.info(
+        "VisionProjector initialised "
+        "(random weights — load a checkpoint for fine-tuned projection)."
+    )
+    return proj
+
+
+def _vision_context_str(vision_features: torch.Tensor) -> str:
+    """Project ConvNeXt features to LM space and return a compact text summary.
+
+    Runs the :class:`VisionProjector` and computes activation statistics that
+    can be embedded in the LLM prompt as a structured visual context block.
+
+    Args:
+        vision_features: Float tensor of shape ``(768,)``.
+
+    Returns:
+        Multi-line string describing the visual feature statistics.
+    """
+    projector = _get_projector()
+    feat = vision_features.float().cpu().detach()
+    if feat.ndim == 1:
+        feat = feat.unsqueeze(0)  # (1, 768)
+
+    with torch.inference_mode():
+        projected = projector(feat).squeeze(0)  # (2048,)
+
+    mean_val   = projected.mean().item()
+    std_val    = projected.std().item()
+    norm_val   = projected.norm().item()
+    # Count dimensions whose absolute activation exceeds mean + 0.5 * std.
+    threshold  = projected.abs().mean() + 0.5 * projected.abs().std()
+    n_active   = int((projected.abs() > threshold).sum().item())
+    complexity = "high" if n_active > 512 else "medium" if n_active > 128 else "low"
+
+    return (
+        f"  Activation statistics : mean={mean_val:.4f}, std={std_val:.4f}, "
+        f"L2_norm={norm_val:.2f}\n"
+        f"  Visual complexity     : {complexity} "
+        f"({n_active} active dims out of {projected.shape[0]})"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -112,17 +180,36 @@ def generate_explanation(
     """
     model, tokenizer = load_qwen()
 
-    messages = _build_messages(architecture)
-
+    # ── Build prompt (with or without vision context) ─────────────────────────
+    arch_text = _architecture_to_text(architecture)
     if vision_features is not None:
-        logger.debug(
-            "Vision features provided (shape=%s, norm=%.4f) — "
-            "multimodal fusion reserved for next training phase.",
-            tuple(vision_features.shape),
-            vision_features.norm().item(),
-        )
+        try:
+            vision_ctx = _vision_context_str(vision_features)
+            user_content = _USER_TEMPLATE_WITH_VISION.format(
+                arch_json=arch_text,
+                vision_context=vision_ctx,
+            )
+            logger.info(
+                "Vision features integrated into prompt "
+                "(shape=%s, norm=%.4f).",
+                tuple(vision_features.shape),
+                vision_features.norm().item(),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Vision projection failed (%s) — falling back to text-only prompt.",
+                exc,
+            )
+            user_content = _USER_TEMPLATE.format(arch_json=arch_text)
+    else:
+        user_content = _USER_TEMPLATE.format(arch_json=arch_text)
 
-    # Apply the chat template (Qwen uses a specific format).
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user",   "content": user_content},
+    ]
+
+    # ── Tokenise & generate ───────────────────────────────────────────────────
     text = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
@@ -130,11 +217,13 @@ def generate_explanation(
     )
     inputs = tokenizer(text, return_tensors="pt")
 
-    # Move inputs to the same device as the model's first parameter.
     device = next(model.parameters()).device
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    logger.info("Generating explanation for architecture with %d nodes…", len(architecture.nodes))
+    logger.info(
+        "Generating explanation for architecture with %d nodes…",
+        len(architecture.nodes),
+    )
 
     with torch.inference_mode():
         output_ids = model.generate(
@@ -146,7 +235,6 @@ def generate_explanation(
             pad_token_id=tokenizer.eos_token_id,
         )
 
-    # Decode only the newly generated tokens (skip the prompt).
     new_ids = output_ids[0][inputs["input_ids"].shape[-1]:]
     explanation: str = tokenizer.decode(new_ids, skip_special_tokens=True).strip()
 
