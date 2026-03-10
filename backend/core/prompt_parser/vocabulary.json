@@ -1,0 +1,38 @@
+{
+  "Frontend": [
+    "frontend", "ui", "react", "reactjs", "vue", "vuejs", "angular",
+    "web", "client", "browser", "spa", "nextjs", "next", "nuxt",
+    "svelte", "html", "css", "javascript", "typescript"
+  ],
+  "Backend": [
+    "backend", "api", "server", "fastapi", "django", "flask",
+    "express", "expressjs", "spring", "rails", "laravel", "nestjs",
+    "rest", "graphql", "grpc", "gateway", "proxy", "nginx", "node"
+  ],
+  "Database": [
+    "database", "db", "postgres", "postgresql", "mysql", "mariadb",
+    "mongodb", "mongo", "sqlite", "cassandra", "dynamo", "dynamodb",
+    "firestore", "supabase", "cockroachdb", "aurora", "rds", "sql",
+    "nosql", "timescaledb", "influxdb", "clickhouse"
+  ],
+  "Cache": [
+    "cache", "redis", "memcached", "varnish", "cdn", "cloudfront",
+    "fastly", "caching", "in-memory"
+  ],
+  "Queue": [
+    "queue", "kafka", "rabbitmq", "sqs", "pubsub", "pub-sub",
+    "nats", "activemq", "celery", "worker", "job", "task",
+    "message", "broker", "stream", "kinesis", "eventbus", "bus"
+  ],
+  "Service": [
+    "service", "microservice", "micro-service", "auth", "authentication",
+    "authorization", "notification", "email", "sms", "search", "elastic",
+    "elasticsearch", "logging", "monitoring", "analytics", "reporting",
+    "billing", "payment-service", "upload", "storage-service"
+  ],
+  "External": [
+    "external", "third-party", "thirdparty", "payment", "stripe",
+    "paypal", "twilio", "sendgrid", "mailgun", "oauth", "saml",
+    "s3", "gcs", "azure-blob", "maps", "google-maps", "openai"
+  ]
+}
