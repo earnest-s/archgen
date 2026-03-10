@@ -55,8 +55,61 @@ function generateId(): string {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Inner toolbar – must live inside ReactFlow to access useReactFlow()
 // ---------------------------------------------------------------------------
+
+interface ToolbarProps {
+  onAddNode: (type: NodeType) => void;
+  onDeleteSelected: () => void;
+}
+
+const InnerToolbar: React.FC<ToolbarProps> = ({ onAddNode, onDeleteSelected }) => {
+  const { fitView } = useReactFlow();
+
+  return (
+    <Panel position="top-left">
+      <div className="flex flex-wrap gap-1 bg-white/90 backdrop-blur-sm
+                      rounded-lg shadow p-2 border border-gray-200">
+        {/* Node type buttons */}
+        {NODE_TYPE_OPTIONS.map((type) => (
+          <button
+            key={type}
+            onClick={() => onAddNode(type)}
+            className="rounded px-2 py-1 text-xs font-medium text-gray-700
+                       bg-gray-100 hover:bg-gray-200 transition-colors"
+            title={`Add ${type} node`}
+          >
+            + {type}
+          </button>
+        ))}
+
+        <div className="w-px bg-gray-300 mx-1 self-stretch" />
+
+        {/* Reset layout */}
+        <button
+          onClick={() => fitView({ padding: 0.15, duration: 300 })}
+          className="rounded px-2 py-1 text-xs font-medium text-blue-700
+                     bg-blue-50 hover:bg-blue-100 transition-colors"
+          title="Reset layout (fit view)"
+        >
+          ⊟ Fit
+        </button>
+
+        {/* Delete selected */}
+        <button
+          onClick={onDeleteSelected}
+          className="rounded px-2 py-1 text-xs font-medium text-red-700
+                     bg-red-50 hover:bg-red-100 transition-colors"
+          title="Delete selected nodes/edges"
+        >
+          ✕ Delete
+        </button>
+      </div>
+    </Panel>
+  );
+};
+
+
 
 export const DiagramEditor: React.FC<Props> = ({
   architecture,
@@ -70,6 +123,10 @@ export const DiagramEditor: React.FC<Props> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState<string>("");
   const renameRef = useRef<HTMLInputElement>(null);
+
+  // Track selected elements so the toolbar "Delete" button knows what to remove.
+  const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(new Set());
 
   // Sync inbound architecture prop changes to canvas state.
   useEffect(() => {
