@@ -27,21 +27,32 @@ import { Toolbar, ViewMode } from "./components/Toolbar";
 import type { Architecture } from "./types/architecture";
 
 const App: React.FC = () => {
-  const [isLoading, setIsLoading]         = useState(false);
-  const [error, setError]                 = useState<string | null>(null);
-  const [architecture, setArchitecture]   = useState<Architecture | null>(null);
-  const [diagramBase64, setDiagramBase64] = useState<string | null>(null);
-  const [viewMode, setViewMode]           = useState<ViewMode>("viewer");
+  const [isLoading, setIsLoading]           = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
+  const [architecture, setArchitecture]     = useState<Architecture | null>(null);
+  const [diagramBase64, setDiagramBase64]   = useState<string | null>(null);
+  const [viewMode, setViewMode]             = useState<ViewMode>("viewer");
+  const [explanation, setExplanation]       = useState<string | null>(null);
+  const [isExplaining, setIsExplaining]     = useState(false);
 
   // ── Generate full pipeline ─────────────────────────────────────────────────
   const handleGenerate = async (prompt: string) => {
     setIsLoading(true);
     setError(null);
+    setExplanation(null);
     try {
       const resp = await generateArchitecture(prompt);
       setArchitecture(resp.architecture);
       setDiagramBase64(resp.diagram_base64 ?? null);
       setViewMode("viewer");
+
+      // Fire-and-forget: fetch explanation in background so the diagram
+      // renders immediately while the LLM generates asynchronously.
+      setIsExplaining(true);
+      explainArchitecture(resp.architecture, resp.diagram_path)
+        .then((r) => setExplanation(r.explanation))
+        .catch((err) => console.warn("Explanation fetch failed:", err))
+        .finally(() => setIsExplaining(false));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

@@ -24,7 +24,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -102,16 +102,20 @@ def train(
     batch_size: int = 32,
     lr: float = 3e-4,
     val_split: float = 0.1,
+    patience: int = 5,
+    log_dir: Optional[Path] = None,
 ) -> None:
     """Fine-tune ConvNeXt-Tiny for multi-label NodeType classification.
 
     Args:
         data_dir:   Root directory containing ``dataset.jsonl``.
         out_dir:    Directory to save model checkpoints.
-        epochs:     Number of training epochs.
+        epochs:     Maximum number of training epochs.
         batch_size: Mini-batch size.
         lr:         Initial learning rate (AdamW).
         val_split:  Fraction of data reserved for validation.
+        patience:   Early-stopping patience (epochs without improvement).
+        log_dir:    Optional TensorBoard log directory.
     """
     from backend.core.vision.convnext_loader import CONVNEXT_TINY_FEATURES, load_convnext
 
@@ -149,8 +153,20 @@ def train(
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, T_max=epochs)
     criterion = nn.BCEWithLogitsLoss()
 
+    # ── TensorBoard (optional) ───────────────────────────────────────────────
+    writer = None
+    tb_log = log_dir or (out_dir / "tensorboard")
+    try:
+        from torch.utils.tensorboard import SummaryWriter  # type: ignore
+        tb_log.mkdir(parents=True, exist_ok=True)
+        writer = SummaryWriter(log_dir=str(tb_log))
+        logger.info("TensorBoard logging → %s", tb_log)
+    except ImportError:
+        logger.info("tensorboard not installed — skipping TB logging.")
+
     # ── Training ─────────────────────────────────────────────────────────────
-    best_val_loss = float("inf")
+    best_val_loss      = float("inf")
+    early_stop_counter = 0
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -168,26 +184,61 @@ def train(
 
         # ── Validation ───────────────────────────────────────────────────────
         model.eval()
-        val_loss = 0.0
+        val_loss          = 0.0
+        correct_per_class = torch.zeros(NUM_LABELS, device=device)
+        total_per_class   = torch.zeros(NUM_LABELS, device=device)
+
         with torch.inference_mode():
             for imgs, labels in val_loader:
                 imgs, labels = imgs.to(device), labels.to(device)
                 logits = model(imgs)
                 val_loss += criterion(logits, labels).item() * imgs.size(0)
-        avg_val = val_loss / val_size
+                preds    = (torch.sigmoid(logits) > 0.5).float()
+                correct_per_class += (preds == labels).float().sum(dim=0)
+                total_per_class   += labels.size(0)
+
+        avg_val  = val_loss / val_size
+        accuracy = (correct_per_class / total_per_class.clamp(min=1)).mean().item()
+        per_cls  = {
+            NODE_TYPES[i]: round(
+                correct_per_class[i].item() / max(total_per_class[i].item(), 1), 3
+            )
+            for i in range(NUM_LABELS)
+        }
 
         scheduler.step()
 
         logger.info(
-            "Epoch %3d / %d | train_loss=%.4f | val_loss=%.4f",
-            epoch, epochs, avg_train, avg_val,
+            "Epoch %3d / %d | train_loss=%.4f | val_loss=%.4f | val_acc=%.4f",
+            epoch, epochs, avg_train, avg_val, accuracy,
         )
+        logger.info("  Per-class: %s", per_cls)
+
+        if writer:
+            writer.add_scalar("Loss/train",    avg_train, epoch)
+            writer.add_scalar("Loss/val",      avg_val,   epoch)
+            writer.add_scalar("Accuracy/val",  accuracy,  epoch)
+            for cls, acc in per_cls.items():
+                writer.add_scalar(f"Accuracy/{cls}", acc, epoch)
 
         if avg_val < best_val_loss:
-            best_val_loss = avg_val
-            ckpt_path = out_dir / "best_convnext.pth"
+            best_val_loss      = avg_val
+            early_stop_counter = 0
+            ckpt_path = out_dir / "convnext_best.pt"
             torch.save(model.state_dict(), ckpt_path)
-            logger.info("  ✓ New best model saved → %s", ckpt_path)
+            logger.info("  ✓ New best saved → %s", ckpt_path)
+        else:
+            early_stop_counter += 1
+            logger.info(
+                "  No improvement (%d / %d before early stop).",
+                early_stop_counter, patience,
+            )
+            if early_stop_counter >= patience:
+                logger.info("Early stopping at epoch %d.", epoch)
+                break
+
+    if writer:
+        writer.close()
 
     logger.info("Training complete. Best val loss: %.4f", best_val_loss)
 
@@ -199,12 +250,14 @@ def train(
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fine-tune ConvNeXt for ArchitectAI.")
-    p.add_argument("--data",   default="data/synthetic",     help="Synthetic data root dir.")
-    p.add_argument("--out",    default="checkpoints/convnext", help="Checkpoint output dir.")
-    p.add_argument("--epochs", type=int,   default=20,   help="Training epochs.")
-    p.add_argument("--bs",     type=int,   default=32,   help="Batch size.")
-    p.add_argument("--lr",     type=float, default=3e-4, help="Learning rate.")
-    p.add_argument("--val",    type=float, default=0.1,  help="Validation split fraction.")
+    p.add_argument("--data",    default="data/synthetic",      help="Synthetic data root dir.")
+    p.add_argument("--out",     default="checkpoints/convnext", help="Checkpoint output dir.")
+    p.add_argument("--epochs",  type=int,   default=20,   help="Max training epochs.")
+    p.add_argument("--bs",      type=int,   default=32,   help="Batch size.")
+    p.add_argument("--lr",      type=float, default=3e-4, help="Learning rate.")
+    p.add_argument("--val",     type=float, default=0.1,  help="Validation split fraction.")
+    p.add_argument("--patience",type=int,   default=5,    help="Early-stopping patience.")
+    p.add_argument("--log-dir", default=None,             help="TensorBoard log dir.")
     return p.parse_args()
 
 
@@ -217,4 +270,6 @@ if __name__ == "__main__":
         batch_size=args.bs,
         lr=args.lr,
         val_split=args.val,
+        patience=args.patience,
+        log_dir=Path(args.log_dir) if args.log_dir else None,
     )

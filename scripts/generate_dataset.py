@@ -47,23 +47,41 @@ logger = logging.getLogger(__name__)
 # Generation config
 # ---------------------------------------------------------------------------
 
-# Possible node type pools, weighted toward common patterns.
+# Possible node type pools — weighted toward common real-world patterns.
+# Covers: 3-tier, microservices, event-driven, CQRS, CDN, stream-processing,
+# background-job, and pure API/data topologies.
 _COMMON_PATTERNS: list[list[NodeType]] = [
-    # 3-tier
+    # ── Classic n-tier ────────────────────────────────────────────────────
     [NodeType.Frontend, NodeType.Backend, NodeType.Database],
-    # 3-tier + cache
     [NodeType.Frontend, NodeType.Backend, NodeType.Database, NodeType.Cache],
-    # Microservices
+    [NodeType.Backend, NodeType.Database],
+    [NodeType.Backend, NodeType.Cache, NodeType.Database],
+    # ── Microservices ────────────────────────────────────────────────
     [NodeType.Frontend, NodeType.Backend, NodeType.Service, NodeType.Database, NodeType.Queue],
-    # Full stack
     [NodeType.Frontend, NodeType.Backend, NodeType.Service, NodeType.Database,
      NodeType.Cache, NodeType.Queue, NodeType.External],
-    # API + DB
-    [NodeType.Backend, NodeType.Database],
-    # API + cache + DB
-    [NodeType.Backend, NodeType.Cache, NodeType.Database],
-    # Backend microservices
     [NodeType.Backend, NodeType.Service, NodeType.Service, NodeType.Database],
+    [NodeType.Frontend, NodeType.Backend, NodeType.Service, NodeType.Service,
+     NodeType.Database, NodeType.Cache],
+    # ── Event-driven ───────────────────────────────────────────────
+    [NodeType.Frontend, NodeType.Backend, NodeType.Queue, NodeType.Service, NodeType.Database],
+    [NodeType.Backend, NodeType.Queue, NodeType.Service, NodeType.Database, NodeType.Cache],
+    [NodeType.Backend, NodeType.Queue, NodeType.Queue, NodeType.Service, NodeType.Database],
+    # ── CQRS ───────────────────────────────────────────────────────────
+    [NodeType.Backend, NodeType.Backend, NodeType.Queue, NodeType.Service,
+     NodeType.Database, NodeType.Database],
+    # ── CDN / external-integration ──────────────────────────────────
+    [NodeType.External, NodeType.Frontend, NodeType.Backend, NodeType.Cache, NodeType.Database],
+    [NodeType.Frontend, NodeType.Backend, NodeType.External, NodeType.Database],
+    # ── Background-job processing ──────────────────────────────────
+    [NodeType.Backend, NodeType.Queue, NodeType.Service, NodeType.Database],
+    [NodeType.Backend, NodeType.Service, NodeType.Queue, NodeType.External, NodeType.Database],
+    # ── Stream processing ─────────────────────────────────────────
+    [NodeType.Backend, NodeType.Queue, NodeType.Queue, NodeType.Service,
+     NodeType.Cache, NodeType.Database],
+    # ── Layered (all tiers) ───────────────────────────────────────
+    [NodeType.Frontend, NodeType.Backend, NodeType.Service, NodeType.Cache,
+     NodeType.Database, NodeType.External],
 ]
 
 _LABEL_MAP: dict[NodeType, list[str]] = {

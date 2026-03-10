@@ -175,6 +175,8 @@ def train(
     )
     model = get_peft_model(model, lora_cfg)
     model.print_trainable_parameters()
+    # Required for gradient checkpointing to work with LoRA adapters.
+    model.enable_input_require_grads()
 
     # ── Dataset ──────────────────────────────────────────────────────────────
     ds = ExplanationDataset(manifest, tokenizer, max_length=max_length)
@@ -190,6 +192,7 @@ def train(
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum,
+        gradient_checkpointing=True,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
