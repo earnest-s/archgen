@@ -1,0 +1,40 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ArchitectAI – Python dependencies
+# Install: pip install -r requirements.txt
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── API / web framework ───────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9        # file upload support for FastAPI
+
+# ── Schema / validation ───────────────────────────────────────────────────────
+pydantic>=2.7.0
+
+# ── Diagram generation ────────────────────────────────────────────────────────
+diagrams>=0.23.4               # Python diagrams DSL (requires graphviz system pkg)
+# System requirement: apt install graphviz  /  brew install graphviz
+
+# ── Vision encoder ────────────────────────────────────────────────────────────
+torch>=2.2.0
+torchvision>=0.17.0
+timm>=0.9.16                   # ConvNeXt-Tiny pretrained weights
+Pillow>=10.3.0
+
+# ── LLM / VLM ────────────────────────────────────────────────────────────────
+transformers>=4.40.0
+accelerate>=0.29.0
+bitsandbytes>=0.43.0           # 4-bit quantisation (CUDA required for bfloat16)
+peft>=0.10.0                   # LoRA fine-tuning
+
+# ── CORS / HTTP helpers ───────────────────────────────────────────────────────
+httpx>=0.27.0                  # async HTTP client (used in tests)
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.1           # .env file support
+tqdm>=4.66.2                   # progress bars in training scripts
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.1.1
+pytest-asyncio>=0.23.6
+httpx>=0.27.0                  # TestClient dependency
