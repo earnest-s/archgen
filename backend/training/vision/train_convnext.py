@@ -206,6 +206,59 @@ def train(
             for i in range(NUM_LABELS)
         }
 
+        # ── Per-class precision / recall / F1 (via sklearn) ──────────────
+        try:
+            import numpy as np
+            from sklearn.metrics import classification_report, confusion_matrix  # type: ignore
+
+            # Collect all predictions & labels for this epoch's val set.
+            all_preds_ep:  List[List[int]] = []
+            all_labels_ep: List[List[int]] = []
+            model.eval()
+            with torch.inference_mode():
+                for imgs_v, labels_v in val_loader:
+                    imgs_v, labels_v = imgs_v.to(device), labels_v.to(device)
+                    logits_v = model(imgs_v)
+                    p = (torch.sigmoid(logits_v) > 0.5).int().cpu().tolist()
+                    l = labels_v.int().cpu().tolist()
+                    all_preds_ep.extend(p)
+                    all_labels_ep.extend(l)
+
+            preds_np  = np.array(all_preds_ep,  dtype=int)
+            labels_np = np.array(all_labels_ep, dtype=int)
+
+            report = classification_report(
+                labels_np, preds_np,
+                target_names=NODE_TYPES,
+                zero_division=0,
+                output_dict=True,
+            )
+            logger.info(
+                "  F1 (macro=%.3f  micro=%.3f)",
+                report["macro avg"]["f1-score"],
+                report["weighted avg"]["f1-score"],
+            )
+
+            # Save confusion matrix to checkpoint dir on best epoch.
+            if avg_val < best_val_loss:
+                cm = confusion_matrix(
+                    labels_np.argmax(axis=1) if labels_np.ndim > 1 else labels_np,
+                    preds_np.argmax(axis=1)  if preds_np.ndim  > 1 else preds_np,
+                    labels=list(range(NUM_LABELS)),
+                )
+                cm_path = out_dir / "confusion_matrix.json"
+                cm_path.write_text(
+                    json.dumps(
+                        {"labels": NODE_TYPES, "matrix": cm.tolist()},
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
+                logger.info("  Confusion matrix saved → %s", cm_path)
+
+        except ImportError:
+            pass  # sklearn not installed — skip precision/recall/F1 reporting
+
         scheduler.step()
 
         logger.info(

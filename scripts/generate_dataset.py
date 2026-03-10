@@ -168,13 +168,120 @@ def _random_architecture(idx: int) -> Architecture:
     )
 
 
-# ---------------------------------------------------------------------------
-# Dataset generation
-# ---------------------------------------------------------------------------
+def _random_topology_architecture() -> Architecture:
+    """Generate a fully random architecture with 2-8 nodes and variable edge density.
+
+    Unlike ``_random_architecture`` which picks a fixed pattern, this function
+    samples node count and types freely, then wires up edges with a random
+    density factor.  This ensures balanced NodeType coverage across the dataset.
+    """
+    # Pick 2-8 node types (with repetition allowed for multi-instance types)
+    n_nodes = random.randint(2, 8)
+    all_types = list(NodeType)
+
+    # Bias selection: ensure rare types (Service, Queue, External) appear often
+    weights = [1.5, 1.5, 2.0, 1.5, 1.5, 2.0, 2.0]  # Frontend..External
+    node_types_seq = random.choices(all_types, weights=weights, k=n_nodes)
+
+    type_counts: dict[NodeType, int] = {}
+    nodes: list[Node] = []
+    for node_type in node_types_seq:
+        count = type_counts.get(node_type, 0)
+        label, node_id = _random_label(node_type, count)
+        type_counts[node_type] = count + 1
+        nodes.append(
+            Node(
+                id=node_id,
+                type=node_type,
+                label=label,
+                layer=_LAYER_MAP.get(node_type),
+            )
+        )
+
+    # Random edge density: 0.2 (sparse) to 0.7 (dense) of possible edges
+    edge_density = random.uniform(0.2, 0.7)
+    node_ids = [n.id for n in nodes]
+    node_map = {n.id: n for n in nodes}
+
+    # Generate candidate directed edges (no self-loops)
+    candidate_pairs = [
+        (src, dst)
+        for i, src in enumerate(node_ids)
+        for j, dst in enumerate(node_ids)
+        if i != j
+    ]
+    random.shuffle(candidate_pairs)
+    max_edges = max(1, int(len(candidate_pairs) * edge_density))
+
+    # Ensure at least a spanning path so the graph is connected
+    shuffled_ids = node_ids.copy()
+    random.shuffle(shuffled_ids)
+    spine_edges = list(zip(shuffled_ids, shuffled_ids[1:]))
+
+    edges: list[Edge] = []
+    seen_pairs: set[tuple[str, str]] = set()
+
+    for src, dst in spine_edges + candidate_pairs:
+        if (src, dst) in seen_pairs:
+            continue
+        if len(edges) >= max_edges:
+            break
+        src_type = node_map[src].type
+        dst_type = node_map[dst].type
+        protocols = _PROTOCOLS.get((src_type, dst_type), [])
+        protocol  = random.choice(protocols) if protocols else None
+        edges.append(Edge(**{"from": src, "to": dst, "protocol": protocol}))
+        seen_pairs.add((src, dst))
+
+    return Architecture(
+        nodes=nodes,
+        edges=edges,
+        metadata=Metadata(version=1, style=random.choice(["light", "dark", None])),
+    )
+
+
+def _balanced_architecture(idx: int, n_total: int) -> Architecture:
+    """Return a pattern-based or random-topology architecture.
+
+    The first 70 % of samples use ``_random_architecture`` (template-based);
+    the remaining 30 % use ``_random_topology_architecture`` for variety.
+    Every 7th sample is forced to include a specific NodeType to ensure
+    balanced coverage across the dataset.
+    """
+    # Every 7th sample: force-include a specific NodeType for balance
+    if idx % 7 == 0:
+        forced_type = list(NodeType)[idx // 7 % len(NodeType)]
+        for _ in range(10):  # retry up to 10 times to get a valid arch
+            arch = _random_topology_architecture()
+            types_present = {n.type for n in arch.nodes}
+            if forced_type in types_present:
+                return arch
+        # fallback: inject the forced type
+        arch = _random_topology_architecture()
+        label, node_id = _random_label(forced_type, 99)
+        extra = Node(
+            id=node_id,
+            type=forced_type,
+            label=label,
+            layer=_LAYER_MAP.get(forced_type),
+        )
+        arch.nodes.append(extra)
+        return arch
+
+    if idx % 10 < 7:  # 70 % pattern-based
+        return _random_architecture(idx)
+    else:             # 30 % fully random topology
+        return _random_topology_architecture()
+
+
 
 
 def generate_dataset(n: int, out_dir: Path) -> None:
     """Generate *n* synthetic samples and save to *out_dir*.
+
+    Uses balanced sampling: 70 % template-based patterns + 30 % random
+    topologies with 2-8 nodes and variable edge density.  Every 7th sample
+    force-includes a specific NodeType to guarantee coverage across all 7 types.
 
     Args:
         n:       Number of samples to generate.
@@ -195,7 +302,7 @@ def generate_dataset(n: int, out_dir: Path) -> None:
     for i in range(n):
         stem = f"sample_{i:04d}"
         try:
-            arch = _random_architecture(i)
+            arch = _balanced_architecture(i, n)
         except Exception as exc:
             logger.warning("Sample %04d: architecture generation failed — %s", i, exc)
             continue

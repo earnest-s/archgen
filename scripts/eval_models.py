@@ -128,11 +128,35 @@ def evaluate_convnext(
     macro_f1 = float(f1_score(labels_arr, preds_arr, average="macro",  zero_division=0))
     micro_f1 = float(f1_score(labels_arr, preds_arr, average="micro",  zero_division=0))
 
+    # Per-class precision, recall, F1
+    from sklearn.metrics import classification_report, confusion_matrix  # type: ignore
+    report = classification_report(
+        labels_arr, preds_arr,
+        target_names=NODE_TYPES,
+        zero_division=0,
+        output_dict=True,
+    )
+    per_class_f1 = {
+        t: {
+            "precision": round(report[t]["precision"], 4),
+            "recall":    round(report[t]["recall"],    4),
+            "f1":        round(report[t]["f1-score"],  4),
+        }
+        for t in NODE_TYPES
+    }
+
+    # Confusion matrix (using argmax for dominant label per sample)
+    dominant_pred  = preds_arr.argmax(axis=1)
+    dominant_label = labels_arr.argmax(axis=1)
+    cm = confusion_matrix(dominant_label, dominant_pred, labels=list(range(len(NODE_TYPES))))
+
     return {
         "exact_match_accuracy": round(exact_match, 4),
         "macro_f1":             round(macro_f1, 4),
         "micro_f1":             round(micro_f1, 4),
         "per_class_accuracy":   {k: round(v, 4) for k, v in per_class_acc.items()},
+        "per_class_f1":         per_class_f1,
+        "confusion_matrix":     {"labels": NODE_TYPES, "matrix": cm.tolist()},
         "n_samples":            len(samples),
     }
 
