@@ -25,7 +25,7 @@ from diagrams import Diagram, Edge as DiagramEdge
 from diagrams import Node as DiagramNode
 
 from backend.api.schemas.architecture import Architecture, Edge, Node
-from backend.core.diagram.layout import DIAGRAM_DIRECTION, sort_nodes
+from backend.core.diagram.layout import get_random_direction, sort_nodes
 from backend.core.diagram.node_map import get_diagram_class, get_display_label
 
 logger = logging.getLogger(__name__)
@@ -82,11 +82,14 @@ def generate_diagram(
     # Sorted order ensures deterministic layout.
     ordered_nodes = sort_nodes(architecture.nodes)
 
+    direction = get_random_direction()
+    logger.debug("Diagram direction: %s", direction)
+
     try:
         with Diagram(
             name=diagram_name,
             filename=output_path,
-            direction=DIAGRAM_DIRECTION,
+            direction=direction,
             show=show,
             outformat="png",
         ):

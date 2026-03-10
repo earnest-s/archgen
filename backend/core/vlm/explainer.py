@@ -27,30 +27,46 @@ from backend.core.vlm.qwen_loader import load_qwen
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Prompt template
+# Prompt templates
 # ---------------------------------------------------------------------------
 
 _SYSTEM_PROMPT = (
-    "You are a software architecture expert. "
-    "Given a structured description of a system architecture, produce a clear, "
-    "concise explanation suitable for a technical audience. "
-    "Describe the overall pattern, component roles, and data-flow direction."
+    "You are a senior software architect. "
+    "Given a structured description of a system architecture, produce a concise, "
+    "structured explanation that is useful to a technical audience. "
+    "Always organise your response into exactly four sections with these headings:\n"
+    "  Section 1: Components\n"
+    "  Section 2: Data Flow\n"
+    "  Section 3: Architecture Pattern\n"
+    "  Section 4: Observations\n"
+    "Keep each section to 1-3 sentences. Be specific and avoid filler phrases."
 )
 
 _USER_TEMPLATE = """\
-Below is a JSON description of a software architecture diagram.
+Below is a description of a software architecture.  The detected pattern is: {pattern}.
 
 Architecture:
 {arch_json}
 
-Write a 2-4 sentence plain-English explanation of this architecture.
-Focus on: overall pattern, component roles, and how data flows through the system.
+Respond with exactly four sections:
+
+Section 1: Components
+<List each component and its role in the system.>
+
+Section 2: Data Flow
+<Describe how data moves between components, including protocols where relevant.>
+
+Section 3: Architecture Pattern
+<Name and briefly describe the architectural pattern ({pattern}).>
+
+Section 4: Observations
+<Note key design decisions, trade-offs, or potential improvements.>
 """
 
 # Used when ConvNeXt vision features are available.
 _USER_TEMPLATE_WITH_VISION = """\
-Below is a description of a software architecture diagram, along with a visual
-analysis derived from the diagram image using a ConvNeXt vision encoder.
+Below is a description of a software architecture along with visual analysis from a
+ConvNeXt diagram encoder.  The detected pattern is: {pattern}.
 
 Architecture:
 {arch_json}
@@ -58,10 +74,76 @@ Architecture:
 Diagram Visual Context (ConvNeXt analysis):
 {vision_context}
 
-Based on both the structural description and the visual analysis of the diagram,
-write a 2-4 sentence plain-English explanation of this architecture.
-Focus on: overall pattern, component roles, and how data flows through the system.
+Using both the structural description and the visual context, respond with exactly
+four sections:
+
+Section 1: Components
+<List each component and its role in the system.>
+
+Section 2: Data Flow
+<Describe how data moves between components, including protocols where relevant.>
+
+Section 3: Architecture Pattern
+<Name and briefly describe the architectural pattern ({pattern}).>
+
+Section 4: Observations
+<Note key design decisions, trade-offs, or potential improvements.>
 """
+
+
+# ---------------------------------------------------------------------------
+# Pattern detection
+# ---------------------------------------------------------------------------
+
+# Pattern priority: checked in order; first match wins.
+_PATTERNS = [
+    "streaming pipeline",
+    "event-driven",
+    "microservices",
+    "layered",
+    "client-server",
+]
+
+
+def detect_pattern(arch: Architecture) -> str:
+    """Classify the architecture into a named pattern based on graph structure.
+
+    Heuristics (checked in priority order):
+
+    * **Streaming pipeline** — contains a Queue node *and* ≥ 1 Service node.
+    * **Event-driven** — contains a Queue node without a dedicated Service.
+    * **Microservices** — ≥ 3 Service nodes.
+    * **Layered** — nodes span ≥ 3 distinct layer types (Frontend/Backend/DB…).
+    * **Client-server** — has at least one Frontend and one Backend node.
+    * **Unknown** — none of the above heuristics match.
+
+    Args:
+        arch: A validated :class:`~backend.api.schemas.architecture.Architecture`.
+
+    Returns:
+        One of the pattern strings listed in :data:`_PATTERNS`, or
+        ``"unknown"``.
+    """
+    types = {n.type.value for n in arch.nodes}
+    n_services  = sum(1 for n in arch.nodes if n.type.value == "Service")
+    n_layers    = len(types)
+
+    has_queue    = "Queue"    in types
+    has_service  = n_services > 0
+    has_frontend = "Frontend" in types
+    has_backend  = "Backend"  in types
+
+    if has_queue and has_service:
+        return "streaming pipeline"
+    if has_queue:
+        return "event-driven"
+    if n_services >= 3:
+        return "microservices"
+    if n_layers >= 3:
+        return "layered"
+    if has_frontend and has_backend:
+        return "client-server"
+    return "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +262,10 @@ def generate_explanation(
     """
     model, tokenizer = load_qwen()
 
+    # ── Detect architecture pattern ───────────────────────────────────────────
+    pattern = detect_pattern(architecture)
+    logger.info("Detected architecture pattern: %s", pattern)
+
     # ── Build prompt (with or without vision context) ─────────────────────────
     arch_text = _architecture_to_text(architecture)
     if vision_features is not None:
@@ -188,6 +274,7 @@ def generate_explanation(
             user_content = _USER_TEMPLATE_WITH_VISION.format(
                 arch_json=arch_text,
                 vision_context=vision_ctx,
+                pattern=pattern,
             )
             logger.info(
                 "Vision features integrated into prompt "
@@ -200,9 +287,9 @@ def generate_explanation(
                 "Vision projection failed (%s) — falling back to text-only prompt.",
                 exc,
             )
-            user_content = _USER_TEMPLATE.format(arch_json=arch_text)
+            user_content = _USER_TEMPLATE.format(arch_json=arch_text, pattern=pattern)
     else:
-        user_content = _USER_TEMPLATE.format(arch_json=arch_text)
+        user_content = _USER_TEMPLATE.format(arch_json=arch_text, pattern=pattern)
 
     messages = [
         {"role": "system", "content": _SYSTEM_PROMPT},
@@ -245,17 +332,19 @@ def generate_explanation(
 def generate_explanation_rule_based(architecture: Architecture) -> str:
     """Lightweight, dependency-free fallback explanation (no LLM required).
 
-    Produces a template-filled sentence that describes the architecture pattern.
+    Produces a structured four-section explanation using only string templates.
     Used when Qwen is not installed or during unit-testing.
 
     Args:
         architecture: Validated :class:`Architecture` instance.
 
     Returns:
-        A single-paragraph plain-English description.
+        A plain-English description organised into four sections.
     """
-    node_descriptions = ", ".join(
-        f"a {n.type.value.lower()} layer ({n.label})" for n in architecture.nodes
+    pattern = detect_pattern(architecture)
+
+    node_lines = "\n".join(
+        f"  - {n.label} ({n.type.value})" for n in architecture.nodes
     )
     n_components = len(architecture.nodes)
     n_edges = len(architecture.edges)
@@ -266,32 +355,72 @@ def generate_explanation_rule_based(architecture: Architecture) -> str:
     has_cache     = any(n.type.value == "Cache"     for n in architecture.nodes)
     has_queue     = any(n.type.value == "Queue"     for n in architecture.nodes)
 
-    parts: list[str] = []
+    # ── Section 1: Components ─────────────────────────────────────────────────
+    section1 = f"Section 1: Components\n{node_lines}\n"
 
-    if has_frontend and has_backend and has_database:
-        parts.append(
-            "This architecture follows a classic 3-tier pattern, "
-            "separating presentation, application logic, and data persistence."
-        )
-    elif has_frontend and has_backend:
-        parts.append(
-            "This architecture uses a 2-tier client-server model "
-            "with a dedicated frontend and backend layer."
-        )
-    else:
-        parts.append(
-            f"This architecture consists of {n_components} component"
-            f"{'s' if n_components != 1 else ''}: {node_descriptions}."
-        )
-
-    if has_cache:
-        parts.append("A caching layer reduces database load and improves response latency.")
-    if has_queue:
-        parts.append("A message queue decouples producers from consumers, enabling async processing.")
+    # ── Section 2: Data Flow ──────────────────────────────────────────────────
     if n_edges > 0:
-        parts.append(
+        edge_desc = (
             f"Data flows through {n_edges} directed connection"
             f"{'s' if n_edges != 1 else ''} between components."
         )
+    else:
+        edge_desc = "No explicit connections are defined between components."
 
-    return " ".join(parts)
+    extras: list[str] = []
+    if has_cache:
+        extras.append("A caching layer reduces database load and improves response latency.")
+    if has_queue:
+        extras.append("A message queue decouples producers from consumers, enabling asynchronous processing.")
+
+    section2 = "Section 2: Data Flow\n" + " ".join([edge_desc] + extras)
+
+    # ── Section 3: Architecture Pattern ──────────────────────────────────────
+    pattern_desc: dict[str, str] = {
+        "streaming pipeline": (
+            "This is a streaming pipeline: data is ingested through a queue, "
+            "processed by one or more services, and written to a data store."
+        ),
+        "event-driven": (
+            "This is an event-driven architecture: a message queue decouples "
+            "event producers from consumers for asynchronous communication."
+        ),
+        "microservices": (
+            "This is a microservices architecture: multiple independent services "
+            "each own a specific domain and communicate over the network."
+        ),
+        "layered": (
+            "This is a layered (n-tier) architecture: concerns are separated "
+            "into distinct tiers such as presentation, business logic, and data."
+        ),
+        "client-server": (
+            "This is a client-server architecture: a frontend client delegates "
+            "all business logic and data management to a backend server."
+        ),
+    }
+    section3 = (
+        "Section 3: Architecture Pattern\n"
+        + pattern_desc.get(
+            pattern,
+            f"The architecture pattern is '{pattern}': "
+            f"{n_components} component{'s' if n_components != 1 else ''} "
+            "collaborate to deliver the system's functionality.",
+        )
+    )
+
+    # ── Section 4: Observations ───────────────────────────────────────────────
+    observations: list[str] = []
+    if has_frontend and not has_backend:
+        observations.append("Consider adding a dedicated backend layer for business logic separation.")
+    if has_database and not has_cache:
+        observations.append("Adding a cache layer could reduce database read pressure.")
+    if n_edges == 0:
+        observations.append("No connections are defined; ensure components are wired together.")
+    if not observations:
+        observations.append(
+            f"The architecture uses {n_components} component"
+            f"{'s' if n_components != 1 else ''} and appears well-structured."
+        )
+    section4 = "Section 4: Observations\n" + " ".join(observations)
+
+    return "\n\n".join([section1, section2, section3, section4])

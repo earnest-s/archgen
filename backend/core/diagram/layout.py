@@ -1,13 +1,15 @@
 """
 Layout utilities for the ArchitectAI diagram generator.
 
-Provides deterministic ordering and direction configuration that is consumed by
-:mod:`backend.core.diagram.generator` when constructing a ``diagrams.Diagram``.
+Provides deterministic ordering, random direction selection, and cluster
+grouping configuration consumed by :mod:`backend.core.diagram.generator`
+when constructing a ``diagrams.Diagram``.
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
+import random
+from typing import Dict, List, Optional, Tuple
 
 from backend.api.schemas.architecture import Node, NodeType
 
@@ -23,8 +25,80 @@ LAYER_ORDER: List[NodeType] = [
     NodeType.External,
 ]
 
-# Graphviz rankdir used for all generated diagrams.
-DIAGRAM_DIRECTION: str = "LR"  # left → right
+# Available Graphviz rankdir values.
+DIAGRAM_DIRECTIONS: List[str] = ["LR", "TB"]
+
+# Default direction (kept for backwards compatibility).
+DIAGRAM_DIRECTION: str = "LR"
+
+
+def get_random_direction(seed: Optional[int] = None) -> str:
+    """Return a randomly chosen Graphviz rankdir string.
+
+    Alternates between ``"LR"`` (left-to-right) and ``"TB"`` (top-to-bottom)
+    to create visual diversity across generated training diagrams.
+
+    Args:
+        seed: Optional integer seed for reproducibility.  When *None*, the
+              global random state is used (non-deterministic).
+
+    Returns:
+        ``"LR"`` or ``"TB"``.
+    """
+    rng = random.Random(seed) if seed is not None else random
+    return rng.choice(DIAGRAM_DIRECTIONS)
+
+
+# ---------------------------------------------------------------------------
+# Cluster / group mapping
+# ---------------------------------------------------------------------------
+
+#: Maps each NodeType to a named cluster used for visual grouping in diagrams.
+CLUSTER_MAP: Dict[NodeType, str] = {
+    NodeType.Frontend: "Frontend",
+    NodeType.Backend:  "Backend Services",
+    NodeType.Service:  "Backend Services",
+    NodeType.Database: "Data Stores",
+    NodeType.Cache:    "Data Stores",
+    NodeType.Queue:    "Messaging",
+    NodeType.External: "External",
+}
+
+
+def get_cluster_groups(
+    nodes: List[Node],
+    enabled: bool = True,
+) -> Optional[Dict[str, List[Node]]]:
+    """Group *nodes* into named clusters for ``diagrams.Cluster`` contexts.
+
+    Clusters improve visual separation of:
+    - **Frontend** — UI / client-side nodes.
+    - **Backend Services** — API and service nodes.
+    - **Data Stores** — databases and caches.
+    - **Messaging** — message queues.
+    - **External** — third-party / external system nodes.
+
+    Args:
+        nodes:   List of architecture nodes to group.
+        enabled: When ``False`` returns ``None`` (no clustering applied).
+
+    Returns:
+        Ordered ``{cluster_name: [Node, …]}`` dict, or ``None`` when disabled
+        or when every node would end up in the same single cluster.
+    """
+    if not enabled:
+        return None
+
+    groups: Dict[str, List[Node]] = {}
+    for node in nodes:
+        cluster_name = CLUSTER_MAP.get(node.type, "Other")
+        groups.setdefault(cluster_name, []).append(node)
+
+    # Skip clustering when there is only one group — it adds no visual value.
+    if len(groups) <= 1:
+        return None
+
+    return groups
 
 
 def layer_rank(node: Node) -> int:

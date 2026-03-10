@@ -67,6 +67,15 @@ const App: React.FC = () => {
     setDiagramBase64(null);
   };
 
+  // ── Re-explain after editor edits (called after 500 ms debounce) ──────────
+  const handleExplainRequest = (updated: Architecture) => {
+    setIsExplaining(true);
+    explainArchitecture(updated)
+      .then((r) => setExplanation(r.explanation))
+      .catch((err) => console.warn("Re-explain failed:", err))
+      .finally(() => setIsExplaining(false));
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       {/* Top bar */}
@@ -112,6 +121,7 @@ const App: React.FC = () => {
                   <DiagramEditor
                     architecture={architecture}
                     onArchitectureChange={handleArchitectureChange}
+                    onExplainRequest={handleExplainRequest}
                   />
                 </div>
               )}

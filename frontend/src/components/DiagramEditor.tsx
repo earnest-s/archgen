@@ -39,6 +39,9 @@ import { architectureToFlow, flowToArchitecture } from "../editor/schema";
 interface Props {
   architecture: Architecture;
   onArchitectureChange?: (updated: Architecture) => void;
+  /** Called (debounced, 500 ms) whenever the architecture changes. Use to
+   *  trigger a re-explain request from the parent without flooding the API. */
+  onExplainRequest?: (updated: Architecture) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +116,7 @@ const InnerToolbar: React.FC<ToolbarProps> = ({ onAddNode, onDeleteSelected }) =
 export const DiagramEditor: React.FC<Props> = ({
   architecture,
   onArchitectureChange,
+  onExplainRequest,
 }) => {
   const { nodes: initNodes, edges: initEdges } = architectureToFlow(architecture);
   const [nodes, setNodes, onNodesChange] = useNodesState(initNodes);
@@ -126,6 +130,9 @@ export const DiagramEditor: React.FC<Props> = ({
   // Track selected elements so the toolbar "Delete" button knows what to remove.
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set());
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<Set<string>>(new Set());
+
+  // Debounce timer for re-explain requests.
+  const explainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sync inbound architecture prop changes to canvas state.
   useEffect(() => {
@@ -144,8 +151,16 @@ export const DiagramEditor: React.FC<Props> = ({
         architecture.metadata
       );
       onArchitectureChange(updated);
+
+      // Debounced re-explain — fire after 500 ms of inactivity.
+      if (onExplainRequest) {
+        if (explainTimerRef.current) clearTimeout(explainTimerRef.current);
+        explainTimerRef.current = setTimeout(() => {
+          onExplainRequest(updated);
+        }, 500);
+      }
     },
-    [onArchitectureChange, architecture.metadata]
+    [onArchitectureChange, onExplainRequest, architecture.metadata]
   );
 
   // ── Edge connection ────────────────────────────────────────────────────────
