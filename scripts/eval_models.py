@@ -502,7 +502,7 @@ def main() -> None:
 
     print("=" * 60 + "\n")
 
-    # ── 4. Save JSON ──────────────────────────────────────────────────────────
+    # ── 5. Save JSON ──────────────────────────────────────────────────────────
     output_path.write_text(
         json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8"
     )
