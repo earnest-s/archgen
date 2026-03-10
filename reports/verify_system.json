@@ -1,9 +1,9 @@
 {
   "n_total": 7,
-  "n_passed": 3,
-  "n_failed": 4,
+  "n_passed": 4,
+  "n_failed": 3,
   "all_pass": false,
-  "wall_s": 1.037,
+  "wall_s": 1.053,
   "checks": [
     {
       "name": "Dataset file exists",
@@ -29,23 +29,23 @@
     {
       "name": "Backend imports resolve",
       "status": "PASS",
-      "elapsed_s": 1.0329,
+      "elapsed_s": 1.0189,
       "detail": "parse_prompt, generate_diagram_to_tmpfile, generate_explanation_rule_based",
       "error": null
     },
     {
       "name": "Prompt parser produces nodes",
       "status": "PASS",
-      "elapsed_s": 0.0004,
+      "elapsed_s": 0.0003,
       "detail": "(3 nodes parsed)",
       "error": null
     },
     {
       "name": "Diagram generator produces output",
-      "status": "FAIL",
-      "elapsed_s": 0.0035,
-      "detail": null,
-      "error": "Diagram generation failed for output path '/tmp/tmpoqh_bi8w/verify_test': failed to execute PosixPath('dot'), make sure the Graphviz executables are on your systems' PATH"
+      "status": "PASS",
+      "elapsed_s": 0.0337,
+      "detail": "(PNG, 29,498 bytes)",
+      "error": null
     },
     {
       "name": "Rule-based explainer produces text",
