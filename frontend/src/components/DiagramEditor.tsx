@@ -152,12 +152,45 @@ export const DiagramEditor: React.FC<Props> = ({
   // ── Edge connection ────────────────────────────────────────────────────────
   const onConnect = useCallback(
     (connection: Connection) => {
+      // Prevent self-loops.
+      if (connection.source === connection.target) return;
       const newEdges = addEdge({ ...connection, type: "default" }, edges);
       setEdges(newEdges);
       notifyChange(nodes, newEdges);
     },
     [edges, nodes, notifyChange]
   );
+
+  // ── Track selection ────────────────────────────────────────────────────────
+  const onSelectionChange = useCallback(
+    ({ nodes: sel }: { nodes: Node[]; edges: Edge[] }) => {
+      setSelectedNodeIds(new Set(sel.map((n) => n.id)));
+    },
+    []
+  );
+
+  const onEdgeSelectionChange = useCallback(
+    ({ edges: sel }: { nodes: Node[]; edges: Edge[] }) => {
+      setSelectedEdgeIds(new Set(sel.map((e) => e.id)));
+    },
+    []
+  );
+
+  // ── Delete selected via toolbar button ─────────────────────────────────────
+  const deleteSelected = useCallback(() => {
+    const remainingNodes = nodes.filter((n) => !selectedNodeIds.has(n.id));
+    const deletedNodeIds  = selectedNodeIds;
+    const remainingEdges  = edges.filter(
+      (e) => !selectedEdgeIds.has(e.id) &&
+             !deletedNodeIds.has(e.source) &&
+             !deletedNodeIds.has(e.target)
+    );
+    setNodes(remainingNodes);
+    setEdges(remainingEdges);
+    setSelectedNodeIds(new Set());
+    setSelectedEdgeIds(new Set());
+    notifyChange(remainingNodes, remainingEdges);
+  }, [nodes, edges, selectedNodeIds, selectedEdgeIds, notifyChange]);
 
   // ── Node double-click → rename mode ────────────────────────────────────────
   const onNodeDoubleClick = useCallback(
@@ -277,6 +310,10 @@ export const DiagramEditor: React.FC<Props> = ({
         onNodeDoubleClick={onNodeDoubleClick}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
+        onSelectionChange={(sel) => {
+          onSelectionChange(sel);
+          onEdgeSelectionChange(sel);
+        }}
         deleteKeyCode={["Backspace", "Delete"]}
         fitView
       >
@@ -284,23 +321,7 @@ export const DiagramEditor: React.FC<Props> = ({
         <MiniMap />
         <Background gap={16} />
 
-        {/* Add-node toolbar */}
-        <Panel position="top-left">
-          <div className="flex flex-wrap gap-1 bg-white/90 backdrop-blur-sm
-                          rounded-lg shadow p-2 border border-gray-200">
-            {NODE_TYPE_OPTIONS.map((type) => (
-              <button
-                key={type}
-                onClick={() => addNode(type)}
-                className="rounded px-2 py-1 text-xs font-medium text-gray-700
-                           bg-gray-100 hover:bg-gray-200 transition-colors"
-                title={`Add ${type} node`}
-              >
-                + {type}
-              </button>
-            ))}
-          </div>
-        </Panel>
+        <InnerToolbar onAddNode={addNode} onDeleteSelected={deleteSelected} />
       </ReactFlow>
     </div>
   );
