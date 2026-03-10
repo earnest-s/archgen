@@ -18,7 +18,7 @@
 
 import React, { useState } from "react";
 
-import { generateArchitecture } from "./api/client";
+import { explainArchitecture, generateArchitecture } from "./api/client";
 import { DiagramEditor } from "./components/DiagramEditor";
 import { DiagramViewer } from "./components/DiagramViewer";
 import { ExplanationPanel } from "./components/ExplanationPanel";
@@ -108,7 +108,11 @@ const App: React.FC = () => {
 
             {/* Sidebar */}
             <div className="lg:col-span-1">
-              <ExplanationPanel architecture={architecture} />
+              <ExplanationPanel
+                architecture={architecture}
+                explanation={explanation}
+                isLoadingExplanation={isExplaining}
+              />
             </div>
           </div>
         )}
