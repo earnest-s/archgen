@@ -259,6 +259,106 @@ def evaluate_explanations(
 
 
 # ---------------------------------------------------------------------------
+# Rule-based vs LLM comparison
+# ---------------------------------------------------------------------------
+
+
+def compare_explainers(
+    manifest_path: Path,
+    max_samples: int,
+) -> Dict:
+    """Run both rule-based and LLM explainers on the same samples.
+
+    Returns a side-by-side dict with BLEU-4 and ROUGE-L for each explainer.
+    Requires the Qwen LLM to be in the Python path and importable.
+    """
+    try:
+        import nltk  # type: ignore
+        from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction  # type: ignore
+        nltk.download("punkt",     quiet=True)
+        nltk.download("punkt_tab", quiet=True)
+    except ImportError:
+        return {"error": "nltk not installed"}
+
+    try:
+        from rouge_score import rouge_scorer  # type: ignore
+    except ImportError:
+        return {"error": "rouge-score not installed"}
+
+    from backend.api.schemas.architecture import Architecture
+    from backend.core.vlm.explainer import (
+        generate_explanation,
+        generate_explanation_rule_based,
+    )
+
+    samples: List[dict] = []
+    with manifest_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            entry = json.loads(line.strip())
+            if entry.get("explanation"):
+                samples.append(entry)
+                if len(samples) >= max_samples:
+                    break
+
+    logger.info("Explainer comparison on %d samples", len(samples))
+
+    scorer    = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
+    smoothing = SmoothingFunction().method1
+
+    def _score_mode(use_llm: bool) -> Dict:
+        refs_corpus: List[List[List[str]]] = []
+        hyps_corpus: List[List[str]]       = []
+        rouge_scores: List[float]           = []
+
+        for entry in samples:
+            try:
+                arch = Architecture.model_validate(entry["architecture"])
+            except Exception:
+                continue
+            reference = entry["explanation"]
+
+            try:
+                if use_llm:
+                    hypothesis = generate_explanation(arch)
+                else:
+                    hypothesis = generate_explanation_rule_based(arch)
+            except Exception as exc:
+                logger.warning("Explainer error (llm=%s): %s", use_llm, exc)
+                continue
+
+            ref_tokens = nltk.word_tokenize(reference.lower())
+            hyp_tokens = nltk.word_tokenize(hypothesis.lower())
+            refs_corpus.append([ref_tokens])
+            hyps_corpus.append(hyp_tokens)
+            rouge_scores.append(
+                scorer.score(reference, hypothesis)["rougeL"].fmeasure
+            )
+
+        if not hyps_corpus:
+            return {"bleu4": 0.0, "rouge_l": 0.0, "n_samples": 0}
+
+        return {
+            "bleu4":    round(float(corpus_bleu(
+                refs_corpus, hyps_corpus,
+                weights=(0.25, 0.25, 0.25, 0.25),
+                smoothing_function=smoothing,
+            )), 4),
+            "rouge_l":  round(float(sum(rouge_scores) / len(rouge_scores)), 4),
+            "n_samples": len(hyps_corpus),
+        }
+
+    rule_based_scores = _score_mode(use_llm=False)
+    logger.info("Rule-based scores: %s", rule_based_scores)
+    llm_scores = _score_mode(use_llm=True)
+    logger.info("LLM scores: %s", llm_scores)
+
+    return {
+        "rule_based": rule_based_scores,
+        "llm":        llm_scores,
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -295,6 +395,10 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument(
         "--skip-explanation", action="store_true",
         help="Skip explanation quality evaluation.",
+    )
+    p.add_argument(
+        "--compare-explainers", action="store_true",
+        help="Run both rule-based and LLM explainers side-by-side and compare BLEU-4/ROUGE-L.",
     )
     return p.parse_args()
 
@@ -347,7 +451,21 @@ def main() -> None:
             logger.exception("Explanation evaluation failed: %s", exc)
             results["explanation"] = {"error": str(exc)}
 
-    # ── 3. Print summary ──────────────────────────────────────────────────────
+    # ── 3. Rule-based vs LLM comparison ──────────────────────────────────────
+    if getattr(args, "compare_explainers", False):
+        logger.info("=== Rule-based vs LLM Comparison ===")
+        try:
+            cmp_results = compare_explainers(
+                manifest_path=manifest_path,
+                max_samples=args.max_samples,
+            )
+            results["explainer_comparison"] = cmp_results
+            logger.info("Comparison results: %s", cmp_results)
+        except Exception as exc:
+            logger.exception("Explainer comparison failed: %s", exc)
+            results["explainer_comparison"] = {"error": str(exc)}
+
+    # ── 4. Print summary ──────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("  ArchitectAI Evaluation Results")
     print("=" * 60)
@@ -361,12 +479,26 @@ def main() -> None:
         print("    Per-class accuracy:")
         for cls, acc in v.get("per_class_accuracy", {}).items():
             print(f"      {cls:<10} {acc:.4f}")
+        if "per_class_f1" in v:
+            print("    Per-class precision / recall / F1:")
+            for cls, m in v["per_class_f1"].items():
+                print(f"      {cls:<10}  P={m['precision']:.4f}  R={m['recall']:.4f}  F1={m['f1']:.4f}")
 
     if "explanation" in results and "error" not in results["explanation"]:
         e = results["explanation"]
         print(f"\n  Explanation (Qwen) — {e['n_samples']} samples")
         print(f"    BLEU-4     : {e['bleu4']:.4f}")
         print(f"    ROUGE-L    : {e['rouge_l']:.4f}")
+
+    if "explainer_comparison" in results and "error" not in results["explainer_comparison"]:
+        cmp = results["explainer_comparison"]
+        rb  = cmp.get("rule_based", {})
+        llm = cmp.get("llm", {})
+        print("\n  Explainer Comparison")
+        print(f"    {'Mode':<14} {'BLEU-4':>8} {'ROUGE-L':>9} {'Samples':>9}")
+        print(f"    {'-'*14} {'-'*8} {'-'*9} {'-'*9}")
+        print(f"    {'Rule-based':<14} {rb.get('bleu4', 0):>8.4f} {rb.get('rouge_l', 0):>9.4f} {rb.get('n_samples', 0):>9}")
+        print(f"    {'LLM (Qwen)':<14} {llm.get('bleu4', 0):>8.4f} {llm.get('rouge_l', 0):>9.4f} {llm.get('n_samples', 0):>9}")
 
     print("=" * 60 + "\n")
 
