@@ -176,9 +176,6 @@ def _fallback_node() -> Node:
 # Public API
 # ---------------------------------------------------------------------------
 
-import re  # noqa: E402  (must come after stdlib imports; kept here for locality)
-
-
 def parse_prompt(
     prompt: str,
     *,
