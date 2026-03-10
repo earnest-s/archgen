@@ -21,7 +21,6 @@ import ReactFlow, {
   MiniMap,
   Node,
   Panel,
-  ReactFlowProvider,
   useEdgesState,
   useNodesState,
   useReactFlow,
