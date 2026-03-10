@@ -232,11 +232,13 @@ def _parse_args() -> argparse.Namespace:
         description="Generate synthetic ArchitectAI training data."
     )
     parser.add_argument(
-        "--n", type=int, default=100,
+        "--n", "--num-samples", dest="n", type=int, default=100,
+        metavar="N",
         help="Number of samples to generate (default: 100)."
     )
     parser.add_argument(
-        "--out", type=str, default="data/synthetic",
+        "--out", "--output-dir", dest="out", type=str, default="data/synthetic",
+        metavar="DIR",
         help="Output directory (default: data/synthetic)."
     )
     parser.add_argument(
