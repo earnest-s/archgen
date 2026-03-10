@@ -1,0 +1,74 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# ArchitectAI – Docker Compose
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# GPU (requires nvidia-container-toolkit on host):
+#   docker compose -f docker/docker-compose.yml --profile gpu up --build
+#
+# CPU-only:
+#   docker compose -f docker/docker-compose.yml up --build
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: architectai
+
+services:
+
+  # ── Backend (FastAPI + PyTorch) ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    image: architectai-backend:latest
+    container_name: architectai-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist generated diagrams and dataset between restarts
+      - ../data:/app/data
+      - ../checkpoints:/app/checkpoints
+      # Hot-reload source during development (comment out for production)
+      - ../backend:/app/backend:ro
+      - ../shared:/app/shared:ro
+    # ── GPU support (remove this section for CPU-only) ──────────────────────
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ── Frontend (React/Vite → nginx) ───────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        # During compose build the frontend talks to the host-mapped backend port.
+        # In production, nginx proxies /api/ → backend:8000 so set to /api.
+        VITE_API_BASE_URL: http://localhost:8000
+    image: architectai-frontend:latest
+    container_name: architectai-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  data:
+  checkpoints:
