@@ -9,6 +9,7 @@
 
 import type {
   Architecture,
+  ExplainResponse,
   FullPipelineResponse,
   GenerateDiagramResponse,
   ParsePromptResponse,
@@ -67,4 +68,15 @@ export async function generateArchitecture(
   prompt: string
 ): Promise<FullPipelineResponse> {
   return post<FullPipelineResponse>("/generate", { prompt });
+}
+
+/**
+ * Call POST /explain.
+ * Returns AI-generated plain-English explanation of the architecture.
+ */
+export async function explainArchitecture(
+  architecture: Architecture,
+  diagram_path?: string
+): Promise<ExplainResponse> {
+  return post<ExplainResponse>("/explain", { architecture, diagram_path });
 }

@@ -54,3 +54,8 @@ export interface FullPipelineResponse {
   diagram_path: string;
   diagram_base64?: string;
 }
+
+/** Response from POST /explain */
+export interface ExplainResponse {
+  explanation: string;
+}
