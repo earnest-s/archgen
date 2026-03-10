@@ -1,9 +1,9 @@
 {
-  "n_total": 8,
-  "n_passed": 0,
-  "n_failed": 8,
+  "n_total": 7,
+  "n_passed": 3,
+  "n_failed": 4,
   "all_pass": false,
-  "wall_s": 2.938,
+  "wall_s": 1.037,
   "checks": [
     {
       "name": "Dataset file exists",
@@ -28,38 +28,31 @@
     },
     {
       "name": "Backend imports resolve",
-      "status": "FAIL",
-      "elapsed_s": 0.1273,
-      "detail": null,
-      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+      "status": "PASS",
+      "elapsed_s": 1.0329,
+      "detail": "parse_prompt, generate_diagram_to_tmpfile, generate_explanation_rule_based",
+      "error": null
     },
     {
       "name": "Prompt parser produces nodes",
-      "status": "FAIL",
-      "elapsed_s": 0.0,
-      "detail": null,
-      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+      "status": "PASS",
+      "elapsed_s": 0.0004,
+      "detail": "(3 nodes parsed)",
+      "error": null
     },
     {
       "name": "Diagram generator produces output",
       "status": "FAIL",
-      "elapsed_s": 0.0,
+      "elapsed_s": 0.0035,
       "detail": null,
-      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
-    },
-    {
-      "name": "Vision encoder \u2192 768-dim embedding",
-      "status": "FAIL",
-      "elapsed_s": 2.8106,
-      "detail": null,
-      "error": "cannot import name 'VisionEncoder' from 'backend.core.vision.encoder' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/vision/encoder.py)"
+      "error": "Diagram generation failed for output path '/tmp/tmpoqh_bi8w/verify_test': failed to execute PosixPath('dot'), make sure the Graphviz executables are on your systems' PATH"
     },
     {
       "name": "Rule-based explainer produces text",
-      "status": "FAIL",
-      "elapsed_s": 0.0,
-      "detail": null,
-      "error": "cannot import name 'PromptParser' from 'backend.core.prompt_parser.parser' (/home/earnest/Downloads/Ai_Architecture_Generator/backend/core/prompt_parser/parser.py)"
+      "status": "PASS",
+      "elapsed_s": 0.0002,
+      "detail": "(490 chars)",
+      "error": null
     }
   ]
 }
