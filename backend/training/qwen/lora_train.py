@@ -25,6 +25,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import logging
 from pathlib import Path
@@ -186,25 +187,31 @@ def train(
     train_ds, val_ds = torch.utils.data.random_split(ds, [train_size, val_size])
 
     # ── TrainingArguments ────────────────────────────────────────────────────
-    training_args = TrainingArguments(
-        output_dir=str(out_dir),
-        num_train_epochs=epochs,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=grad_accum,
-        gradient_checkpointing=True,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
-        load_best_model_at_end=True,
-        learning_rate=lr,
-        lr_scheduler_type="cosine",
-        warmup_ratio=0.05,
-        weight_decay=0.01,
-        fp16=torch.cuda.is_available(),
-        logging_steps=10,
-        report_to="none",
-        dataloader_num_workers=2,
-    )
+    args_kwargs: Dict[str, Any] = {
+        "output_dir": str(out_dir),
+        "num_train_epochs": epochs,
+        "per_device_train_batch_size": batch_size,
+        "per_device_eval_batch_size": batch_size,
+        "gradient_accumulation_steps": grad_accum,
+        "gradient_checkpointing": True,
+        "save_strategy": "epoch",
+        "load_best_model_at_end": True,
+        "learning_rate": lr,
+        "lr_scheduler_type": "cosine",
+        "warmup_ratio": 0.05,
+        "weight_decay": 0.01,
+        "fp16": torch.cuda.is_available(),
+        "logging_steps": 10,
+        "report_to": "none",
+        "dataloader_num_workers": 2,
+    }
+    ta_params = inspect.signature(TrainingArguments.__init__).parameters
+    if "eval_strategy" in ta_params:
+        args_kwargs["eval_strategy"] = "epoch"
+    else:
+        args_kwargs["evaluation_strategy"] = "epoch"
+
+    training_args = TrainingArguments(**args_kwargs)
 
     # ── Trainer ──────────────────────────────────────────────────────────────
     trainer = Trainer(

@@ -170,9 +170,10 @@ def _architecture_to_text(arch: Architecture) -> str:
 def _build_messages(arch: Architecture) -> list[dict[str, str]]:
     """Build the chat message list for the Qwen instruct model (text-only)."""
     arch_text = _architecture_to_text(arch)
+    pattern = detect_pattern(arch)
     return [
         {"role": "system", "content": _SYSTEM_PROMPT},
-        {"role": "user",   "content": _USER_TEMPLATE.format(arch_json=arch_text)},
+        {"role": "user",   "content": _USER_TEMPLATE.format(arch_json=arch_text, pattern=pattern)},
     ]
 
 

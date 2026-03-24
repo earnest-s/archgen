@@ -120,7 +120,8 @@ def main() -> None:
             _print_gpu_usage()
             cmd = [
                 sys.executable,
-                "backend/training/vision/train_convnext.py",
+                "-m",
+                "backend.training.vision.train_convnext",
                 "--data",    args.data,
                 "--out",     args.convnext_out,
                 "--epochs",  str(args.epochs_conv),
@@ -145,7 +146,8 @@ def main() -> None:
             _print_gpu_usage()
             cmd = [
                 sys.executable,
-                "backend/training/qwen/lora_train.py",
+                "-m",
+                "backend.training.qwen.lora_train",
                 "--data",   args.data,
                 "--out",    args.qwen_out,
                 "--epochs", str(args.epochs_qwen),
