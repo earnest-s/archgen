@@ -401,4 +401,8 @@ def _parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = _parse_args()
     random.seed(args.seed)
-    generate_dataset(n=args.n, out_dir=Path(args.out))
+    generate_dataset(
+        n=args.n,
+        out_dir=Path(args.out),
+        diversity=args.diversity,
+    )
