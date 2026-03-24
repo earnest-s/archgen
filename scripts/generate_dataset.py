@@ -357,9 +357,9 @@ def _parse_args() -> argparse.Namespace:
         description="Generate synthetic ArchitectAI training data."
     )
     parser.add_argument(
-        "--n", "--num-samples", dest="n", type=int, default=100,
+        "-n", "--num-samples", dest="n", type=int, default=100,
         metavar="N",
-        help="Number of samples to generate (default: 100)."
+        help="Number of samples to generate (default: 100). Supports up to 5000+."
     )
     parser.add_argument(
         "--out", "--output-dir", dest="out", type=str, default="data/synthetic",
@@ -369,6 +369,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--seed", type=int, default=42,
         help="Random seed for reproducibility (default: 42)."
+    )
+    parser.add_argument(
+        "--diversity", choices=["low", "medium", "high"], default="medium",
+        help="Architecture diversity level: low (70%% patterns), medium (50%%), high (30%%). Affects uniqueness."
     )
     return parser.parse_args()
 
