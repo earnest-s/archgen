@@ -240,14 +240,30 @@ def _random_topology_architecture() -> Architecture:
     )
 
 
-def _balanced_architecture(idx: int, n_total: int) -> Architecture:
+def _balanced_architecture(idx: int, n_total: int, diversity: str = "medium") -> Architecture:
     """Return a pattern-based or random-topology architecture.
 
-    The first 70 % of samples use ``_random_architecture`` (template-based);
-    the remaining 30 % use ``_random_topology_architecture`` for variety.
+    The distribution of pattern vs. random is controlled by *diversity*:
+    - "low":    70% patterns, 30% random (less variety, more similar architectures)
+    - "medium": 50% patterns, 50% random (balanced)
+    - "high":   30% patterns, 70% random (maximum variety)
+
     Every 7th sample is forced to include a specific NodeType to ensure
     balanced coverage across the dataset.
+
+    Args:
+        idx:       Sample index in the dataset.
+        n_total:   Total number of samples.
+        diversity: One of "low", "medium", "high".
     """
+    # Control pattern vs. random split
+    diversity_thresholds = {
+        "low": 7,      # 70% patterns
+        "medium": 5,   # 50% patterns
+        "high": 3,     # 30% patterns
+    }
+    pattern_threshold = diversity_thresholds.get(diversity, 5)
+
     # Every 7th sample: force-include a specific NodeType for balance
     if idx % 7 == 0:
         forced_type = list(NodeType)[idx // 7 % len(NodeType)]
@@ -268,9 +284,9 @@ def _balanced_architecture(idx: int, n_total: int) -> Architecture:
         arch.nodes.append(extra)
         return arch
 
-    if idx % 10 < 7:  # 70 % pattern-based
+    if idx % 10 < pattern_threshold:  # Pattern-based
         return _random_architecture(idx)
-    else:             # 30 % fully random topology
+    else:                              # Random topology
         return _random_topology_architecture()
 
 
