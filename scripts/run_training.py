@@ -34,6 +34,7 @@ import json
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 
 _SEP  = "=" * 60
@@ -56,6 +57,30 @@ def _run_stage(label: str, cmd: list[str]) -> tuple[int, float]:
     status  = "ok" if result.returncode == 0 else "failed"
     print(f"\n  → {label}: {status.upper()} ({elapsed:.1f}s)")
     return result.returncode, elapsed
+
+
+def _print_gpu_usage() -> None:
+    try:
+        import torch  # type: ignore
+    except Exception:
+        print("  GPU usage: torch unavailable in this environment")
+        return
+
+    if not torch.cuda.is_available():
+        print("  GPU usage: CUDA not available")
+        return
+
+    try:
+        idx = torch.cuda.current_device()
+        name = torch.cuda.get_device_name(idx)
+        used_mb = torch.cuda.memory_allocated(idx) / 1_048_576
+        reserved_mb = torch.cuda.memory_reserved(idx) / 1_048_576
+        print(
+            f"  GPU usage: cuda:{idx} ({name}) | "
+            f"allocated={used_mb:.1f}MB reserved={reserved_mb:.1f}MB"
+        )
+    except Exception as exc:
+        print(f"  GPU usage: unable to query CUDA memory ({exc})")
 
 
 # ---------------------------------------------------------------------------
@@ -88,50 +113,63 @@ def main() -> None:
     stages: list[dict] = []
     wall_start = time.perf_counter()
 
-    # ── Stage 1: ConvNeXt ────────────────────────────────────────────────────
-    if not args.skip_convnext:
-        cmd = [
-            sys.executable,
-            "backend/training/vision/train_convnext.py",
-            "--data",    args.data,
-            "--out",     args.convnext_out,
-            "--epochs",  str(args.epochs_conv),
-            "--bs",      str(args.bs_conv),
-            "--patience",str(args.patience),
-        ]
-        rc, elapsed = _run_stage("ConvNeXt Vision Encoder", cmd)
-        stages.append({
-            "name": "convnext", "status": "ok" if rc == 0 else "failed",
-            "elapsed_s": round(elapsed, 2), "returncode": rc,
-        })
-        if rc != 0:
-            print("  ConvNeXt training failed — aborting pipeline.")
-            _save_and_exit(stages, args, wall_start, aborted=True)
-    else:
-        print("  Skipping ConvNeXt training (--skip-convnext).")
-        stages.append({"name": "convnext", "status": "skipped"})
+    try:
+        # ── Stage 1: ConvNeXt ────────────────────────────────────────────────
+        if not args.skip_convnext:
+            print("\n  Stage progress: 1/2 (ConvNeXt)")
+            _print_gpu_usage()
+            cmd = [
+                sys.executable,
+                "backend/training/vision/train_convnext.py",
+                "--data",    args.data,
+                "--out",     args.convnext_out,
+                "--epochs",  str(args.epochs_conv),
+                "--bs",      str(args.bs_conv),
+                "--patience",str(args.patience),
+            ]
+            rc, elapsed = _run_stage("ConvNeXt Vision Encoder", cmd)
+            stages.append({
+                "name": "convnext", "status": "ok" if rc == 0 else "failed",
+                "elapsed_s": round(elapsed, 2), "returncode": rc,
+            })
+            if rc != 0:
+                print("  ConvNeXt training failed — aborting pipeline.")
+                _save_and_exit(stages, args, wall_start, aborted=True)
+        else:
+            print("  Skipping ConvNeXt training (--skip-convnext).")
+            stages.append({"name": "convnext", "status": "skipped"})
 
-    # ── Stage 2: Qwen LoRA ───────────────────────────────────────────────────
-    if not args.skip_qwen:
-        cmd = [
-            sys.executable,
-            "backend/training/qwen/lora_train.py",
-            "--data",   f"{args.data}/dataset.jsonl",
-            "--out",    args.qwen_out,
-            "--epochs", str(args.epochs_qwen),
-            "--bs",     str(args.bs_qwen),
-            "--accum",  str(args.accum),
-        ]
-        rc, elapsed = _run_stage("Qwen LoRA Fine-Tuning", cmd)
-        stages.append({
-            "name": "qwen_lora", "status": "ok" if rc == 0 else "failed",
-            "elapsed_s": round(elapsed, 2), "returncode": rc,
-        })
-    else:
-        print("  Skipping Qwen LoRA training (--skip-qwen).")
-        stages.append({"name": "qwen_lora", "status": "skipped"})
+        # ── Stage 2: Qwen LoRA ───────────────────────────────────────────────
+        if not args.skip_qwen:
+            print("\n  Stage progress: 2/2 (Qwen LoRA)")
+            _print_gpu_usage()
+            cmd = [
+                sys.executable,
+                "backend/training/qwen/lora_train.py",
+                "--data",   args.data,
+                "--out",    args.qwen_out,
+                "--epochs", str(args.epochs_qwen),
+                "--bs",     str(args.bs_qwen),
+                "--accum",  str(args.accum),
+            ]
+            rc, elapsed = _run_stage("Qwen LoRA Fine-Tuning", cmd)
+            stages.append({
+                "name": "qwen_lora", "status": "ok" if rc == 0 else "failed",
+                "elapsed_s": round(elapsed, 2), "returncode": rc,
+            })
+            if rc != 0:
+                print("  Qwen LoRA training failed — aborting pipeline.")
+                _save_and_exit(stages, args, wall_start, aborted=True)
+        else:
+            print("  Skipping Qwen LoRA training (--skip-qwen).")
+            stages.append({"name": "qwen_lora", "status": "skipped"})
 
-    _save_and_exit(stages, args, wall_start, aborted=False)
+        _save_and_exit(stages, args, wall_start, aborted=False)
+    except Exception as exc:
+        print("\n  ERROR: Training pipeline crashed unexpectedly.")
+        print(f"  Details: {exc}")
+        traceback.print_exc()
+        _save_and_exit(stages, args, wall_start, aborted=True)
 
 
 def _save_and_exit(stages: list[dict], args: argparse.Namespace,
@@ -142,8 +180,8 @@ def _save_and_exit(stages: list[dict], args: argparse.Namespace,
     checkpoints = {
         "convnext_best_pt": _check_checkpoint(
             Path(args.convnext_out) / "convnext_best.pt"),
-        "qwen_lora_adapter": _check_checkpoint(
-            Path(args.qwen_out) / "lora_adapter"),
+        "qwen_lora_dir": _check_checkpoint(
+            Path(args.qwen_out)),
     }
 
     # ── Print summary ─────────────────────────────────────────────────────────
@@ -189,7 +227,7 @@ def _parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--data",          default="data/synthetic")
-    p.add_argument("--convnext-out",  default="checkpoints/convnext")
+    p.add_argument("--convnext-out",  default="checkpoints")
     p.add_argument("--qwen-out",      default="checkpoints/qwen_lora")
     p.add_argument("--epochs-conv",   type=int, default=30)
     p.add_argument("--bs-conv",       type=int, default=32)

@@ -148,6 +148,13 @@ def train(
         nn.Linear(CONVNEXT_TINY_FEATURES, NUM_LABELS),
     ).to(device)
 
+    # If a prior checkpoint exists, resume from it.
+    ckpt_path = out_dir / "convnext_best.pt"
+    if ckpt_path.exists():
+        state = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(state, strict=False)
+        logger.info("Loaded existing checkpoint → %s", ckpt_path)
+
     # ── Optimiser & loss ─────────────────────────────────────────────────────
     optimiser = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimiser, T_max=epochs)
@@ -277,7 +284,6 @@ def train(
         if avg_val < best_val_loss:
             best_val_loss      = avg_val
             early_stop_counter = 0
-            ckpt_path = out_dir / "convnext_best.pt"
             torch.save(model.state_dict(), ckpt_path)
             logger.info("  ✓ New best saved → %s", ckpt_path)
         else:

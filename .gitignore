@@ -1,0 +1,25 @@
+# Python cache/bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local temp/cache created during installs
+.pip-tmp/
+.pytest_cache/
+.mypy_cache/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Training/runtime outputs
+checkpoints/
+reports/training_summary.json
+
+# Optional local data artifacts
+data/
