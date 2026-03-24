@@ -292,16 +292,21 @@ def _balanced_architecture(idx: int, n_total: int, diversity: str = "medium") ->
 
 
 
-def generate_dataset(n: int, out_dir: Path) -> None:
+def generate_dataset(n: int, out_dir: Path, diversity: str = "medium") -> None:
     """Generate *n* synthetic samples and save to *out_dir*.
 
-    Uses balanced sampling: 70 % template-based patterns + 30 % random
-    topologies with 2-8 nodes and variable edge density.  Every 7th sample
-    force-includes a specific NodeType to guarantee coverage across all 7 types.
+    Uses balanced sampling with configurable diversity:
+    - "low":    70% template-based patterns + 30% random (less variety)
+    - "medium": 50% template-based patterns + 50% random (balanced)
+    - "high":   30% template-based patterns + 70% random (maximum variety)
+
+    Every 7th sample forces inclusion of a specific NodeType to guarantee
+    coverage across all 7 types.
 
     Args:
-        n:       Number of samples to generate.
-        out_dir: Root output directory (created if necessary).
+        n:         Number of samples to generate.
+        out_dir:   Root output directory (created if necessary).
+        diversity: One of "low", "medium", "high" (default: "medium").
     """
     json_dir  = out_dir / "json"
     png_dir   = out_dir / "png"
@@ -313,12 +318,12 @@ def generate_dataset(n: int, out_dir: Path) -> None:
     manifest_path = out_dir / "dataset.jsonl"
     manifest_entries: list[dict] = []
 
-    logger.info("Generating %d synthetic samples → %s", n, out_dir)
+    logger.info("Generating %d synthetic samples (diversity: %s) → %s", n, diversity, out_dir)
 
     for i in range(n):
         stem = f"sample_{i:04d}"
         try:
-            arch = _balanced_architecture(i, n)
+            arch = _balanced_architecture(i, n, diversity=diversity)
         except Exception as exc:
             logger.warning("Sample %04d: architecture generation failed — %s", i, exc)
             continue
