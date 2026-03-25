@@ -9,6 +9,35 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 
+def clean_structured_output(text: str, max_words: int = 150) -> str:
+    cleaned = text.strip()
+
+    for marker in ("Human:", "Assistant:", "User:", "###"):
+        if marker in cleaned:
+            cleaned = cleaned.split(marker, 1)[0].strip()
+
+    section_names = ["Components:", "Data flow:", "Architecture type:"]
+    positions = [cleaned.find(name) for name in section_names]
+
+    if all(pos >= 0 for pos in positions) and positions == sorted(positions):
+        cleaned = cleaned[positions[0]:]
+        arch_start = cleaned.find("Architecture type:")
+        arch_end = len(cleaned)
+
+        for marker in ("Human:", "Assistant:", "User:", "###", "\n\n"):
+            idx = cleaned.find(marker, arch_start + len("Architecture type:"))
+            if idx != -1:
+                arch_end = min(arch_end, idx)
+
+        cleaned = cleaned[:arch_end].strip()
+
+    words = cleaned.split()
+    if len(words) > max_words:
+        cleaned = " ".join(words[:max_words]).strip()
+
+    return cleaned
+
+
 def load_samples(dataset_path: Path, limit: int = 5):
     samples = []
     with dataset_path.open("r", encoding="utf-8") as f:
@@ -89,12 +118,14 @@ Explanation:
         with torch.inference_mode():
             outputs = model.generate(
                 **input_ids,
-                max_new_tokens=120,
+                max_new_tokens=150,
                 temperature=0.7,
                 top_p=0.9,
                 repetition_penalty=1.2,
                 no_repeat_ngram_size=3,
                 do_sample=True,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.eos_token_id,
             )
         elapsed = time.perf_counter() - start
 
@@ -104,6 +135,8 @@ Explanation:
         for prefix in ("Explanation:", "Answer:"):
             if generated.startswith(prefix):
                 generated = generated[len(prefix):].strip()
+
+        generated = clean_structured_output(generated, max_words=150)
 
         mem_mb = torch.cuda.memory_allocated() / (1024 ** 2)
 
