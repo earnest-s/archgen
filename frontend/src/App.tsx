@@ -17,51 +17,20 @@ const defaultText = "3-tier app with frontend, backend, database";
 
 type ArchitectureNode = {
   id: string;
-  type: "ui" | "service" | "data";
+  type?: string;
+  [key: string]: unknown;
 };
 
 type ArchitectureEdge = {
   source: string;
   target: string;
+  [key: string]: unknown;
 };
 
 type Architecture = {
   nodes: ArchitectureNode[];
   edges: ArchitectureEdge[];
-};
-
-const isNodeType = (value: string): value is ArchitectureNode["type"] =>
-  value === "ui" || value === "service" || value === "data";
-
-const architectureFromJson = (inputJson: unknown): Architecture | null => {
-  if (!inputJson || typeof inputJson !== "object") return null;
-  const value = inputJson as { nodes?: unknown; edges?: unknown };
-  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) return null;
-
-  const nodes = value.nodes
-    .map((node) => {
-      if (!node || typeof node !== "object") return null;
-      const candidate = node as { id?: unknown; type?: unknown };
-      if (typeof candidate.id !== "string" || typeof candidate.type !== "string") return null;
-      if (!isNodeType(candidate.type)) return null;
-      return { id: candidate.id, type: candidate.type };
-    })
-    .filter((node): node is ArchitectureNode => node !== null);
-
-  const nodeIds = new Set(nodes.map((node) => node.id));
-
-  const edges = value.edges
-    .map((edge) => {
-      if (!edge || typeof edge !== "object") return null;
-      const candidate = edge as { source?: unknown; target?: unknown };
-      if (typeof candidate.source !== "string" || typeof candidate.target !== "string") return null;
-      if (!nodeIds.has(candidate.source) || !nodeIds.has(candidate.target)) return null;
-      return { source: candidate.source, target: candidate.target };
-    })
-    .filter((edge): edge is ArchitectureEdge => edge !== null);
-
-  if (nodes.length === 0 || edges.length === 0) return null;
-  return { nodes, edges };
+  [key: string]: unknown;
 };
 
 function App() {
@@ -117,12 +86,21 @@ function App() {
       }
 
       const data = (await response.json()) as { explanation?: string; architecture?: unknown };
+      console.log("API RESPONSE:", data);
       setOutput(data.explanation ?? "No explanation returned.");
 
-      const parsedArchitecture = architectureFromJson(data.architecture);
-      if (parsedArchitecture) {
-        setArchitecture(parsedArchitecture);
+      const arch = data.architecture as { nodes?: unknown; edges?: unknown } | undefined;
+      const isValid =
+        !!arch &&
+        Array.isArray(arch.nodes) &&
+        Array.isArray(arch.edges) &&
+        arch.nodes.length > 0 &&
+        arch.edges.length > 0;
+
+      if (isValid) {
+        setArchitecture(data.architecture as Architecture);
       } else {
+        console.error("INVALID ARCH:", data);
         setError("Backend response did not include a valid architecture graph.");
       }
     } catch (err) {

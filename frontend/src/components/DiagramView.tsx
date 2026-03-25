@@ -4,12 +4,14 @@ import "reactflow/dist/style.css";
 
 type ArchitectureNode = {
   id: string;
-  type: "ui" | "service" | "data";
+  type?: string;
+  [key: string]: unknown;
 };
 
 type ArchitectureEdge = {
   source: string;
   target: string;
+  [key: string]: unknown;
 };
 
 type Architecture = {
@@ -41,11 +43,20 @@ const layerBorder: Record<LayerType, string> = {
   data: "#fb923c",
 };
 
+function normalizeLayerType(input: string | undefined): LayerType {
+  if (!input) return "service";
+  const lowered = input.toLowerCase();
+  if (lowered === "ui") return "ui";
+  if (lowered === "data") return "data";
+  return "service";
+}
+
 function DiagramViewInner({ architecture }: DiagramViewProps) {
   const nodes: Node[] = useMemo(() => {
     const groups: Record<LayerType, string[]> = { ui: [], service: [], data: [] };
     architecture.nodes.forEach((node) => {
-      groups[node.type].push(node.id);
+      if (typeof node.id !== "string" || !node.id) return;
+      groups[normalizeLayerType(node.type)].push(node.id);
     });
 
     const spacing = 220;
