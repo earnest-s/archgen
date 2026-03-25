@@ -609,11 +609,14 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   );
 
   const applyGraphChange = useCallback(
-    (updater: (current: GraphState) => GraphState) => {
+    (updater: (current: GraphState) => GraphState, options?: { recordHistory?: boolean }) => {
+      const shouldRecord = options?.recordHistory ?? true;
       setGraph((current) => {
-        historyRef.current.push(cloneGraphState(current));
-        if (historyRef.current.length > 50) historyRef.current.shift();
-        futureRef.current = [];
+        if (shouldRecord) {
+          historyRef.current.push(cloneGraphState(current));
+          if (historyRef.current.length > 50) historyRef.current.shift();
+          futureRef.current = [];
+        }
         return updater(current);
       });
     },
@@ -703,20 +706,22 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      const hasMeaningfulChange = changes.some((change) => change.type !== "select" && change.type !== "dimensions");
       applyGraphChange((current) => ({
         ...current,
         nodes: applyNodeChanges(changes, current.nodes),
-      }));
+      }), { recordHistory: hasMeaningfulChange });
     },
     [applyGraphChange]
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      const hasMeaningfulChange = changes.some((change) => change.type !== "select");
       applyGraphChange((current) => ({
         ...current,
         edges: applyEdgeChanges(changes, current.edges),
-      }));
+      }), { recordHistory: hasMeaningfulChange });
     },
     [applyGraphChange]
   );
@@ -810,7 +815,10 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
             };
           }
 
-          return node;
+          return {
+            ...node,
+            position: abs,
+          };
         });
 
         return { ...current, nodes: updatedNodes };
