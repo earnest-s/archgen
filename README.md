@@ -30,6 +30,15 @@ Use only one environment for everything.
 uv pip install -r requirements.txt --no-cache
 ```
 
+CUDA note:
+- Current pinned stack uses torch==2.11.0 and torchvision==0.26.0.
+- If you need a clean reinstall, run:
+
+```bash
+uv pip uninstall -y torch torchvision
+uv pip install -r requirements.txt --no-cache
+```
+
 Rules enforced:
 - No pip install
 - No wheel caching
