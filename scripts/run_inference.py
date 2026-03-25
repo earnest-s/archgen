@@ -36,6 +36,13 @@ def clean_structured_output(text: str, max_words: int = 150) -> str:
 
         arch_block = f"Architecture type: {arch_content}" if arch_content else "Architecture type:"
         cleaned = "\n".join([components_block, flow_block, arch_block]).strip()
+    else:
+        short = " ".join(cleaned.split()[:60]).strip()
+        cleaned = (
+            f"Components: {short}\n"
+            "Data flow: Not explicitly provided.\n"
+            "Architecture type: Not explicitly provided."
+        )
 
     words = cleaned.split()
     if len(words) > max_words:
