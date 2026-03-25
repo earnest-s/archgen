@@ -553,6 +553,7 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   const futureRef = useRef<GraphState[]>([]);
   const graphRef = useRef(graph);
   const nodeCounterRef = useRef(1);
+  const hasInitializedRef = useRef(false);
 
   useEffect(() => {
     graphRef.current = graph;
@@ -648,6 +649,11 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   }, []);
 
   useEffect(() => {
+    if (hasInitializedRef.current) {
+      return;
+    }
+
+    hasInitializedRef.current = true;
     historyRef.current = [];
     futureRef.current = [];
     nodeCounterRef.current = 1;
@@ -664,6 +670,7 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
     }
     if (command.action === "reset") {
       const next = buildInitialGraph(architecture);
+      // Keep this as a history-recorded change so prompt-generated resets are undoable.
       applyGraphChange(() => next);
       void applyAutoLayout(next);
     }
