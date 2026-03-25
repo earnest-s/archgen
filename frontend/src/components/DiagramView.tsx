@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   addEdge,
+  applyEdgeChanges,
+  applyNodeChanges,
   Background,
   Connection,
   ConnectionLineType,
   Controls,
   Edge,
+  EdgeChange,
   Handle,
   MarkerType,
   Node,
+  NodeChange,
   NodeProps,
   Position,
   ReactFlowProvider,
@@ -240,19 +244,130 @@ function buildInitialEdges(architecture: Architecture): Edge[] {
     }));
 }
 
+type GraphState = {
+  nodes: Node<NodeData>[];
+  edges: Edge[];
+};
+
+function cloneGraphState(state: GraphState): GraphState {
+  return {
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      data: { ...node.data },
+      position: { ...node.position },
+    })),
+    edges: state.edges.map((edge) => ({
+      ...edge,
+      markerEnd: edge.markerEnd,
+      style: edge.style ? { ...edge.style } : undefined,
+    })),
+  };
+}
+
 function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   const initialNodes = useMemo(() => buildInitialNodes(architecture), [architecture]);
   const initialEdges = useMemo(() => buildInitialEdges(architecture), [architecture]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<NodeData>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [graph, setGraph] = useState<GraphState>({ nodes: initialNodes, edges: initialEdges });
   const nodeCounterRef = useRef<number>(1);
+  const historyRef = useRef<GraphState[]>([]);
+  const futureRef = useRef<GraphState[]>([]);
+  const restoringRef = useRef(false);
+  const graphRef = useRef<GraphState>(graph);
 
   useEffect(() => {
-    setNodes(initialNodes);
-    setEdges(initialEdges);
+    graphRef.current = graph;
+  }, [graph]);
+
+  const applyGraphChange = useCallback((updater: (current: GraphState) => GraphState) => {
+    setGraph((current) => {
+      if (!restoringRef.current) {
+        historyRef.current.push(cloneGraphState(current));
+        if (historyRef.current.length > 100) {
+          historyRef.current.shift();
+        }
+        futureRef.current = [];
+      }
+      return updater(current);
+    });
+  }, []);
+
+  useEffect(() => {
+    restoringRef.current = true;
+    setGraph({ nodes: initialNodes, edges: initialEdges });
+    historyRef.current = [];
+    futureRef.current = [];
     nodeCounterRef.current = 1;
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+    restoringRef.current = false;
+  }, [initialNodes, initialEdges]);
+
+  const undo = useCallback(() => {
+    const previous = historyRef.current.pop();
+    if (!previous) return;
+
+    futureRef.current.push(cloneGraphState(graphRef.current));
+    restoringRef.current = true;
+    setGraph(cloneGraphState(previous));
+    restoringRef.current = false;
+  }, []);
+
+  const redo = useCallback(() => {
+    const next = futureRef.current.pop();
+    if (!next) return;
+
+    historyRef.current.push(cloneGraphState(graphRef.current));
+    restoringRef.current = true;
+    setGraph(cloneGraphState(next));
+    restoringRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+      const isEditingText = !!target && (target.isContentEditable || tagName === "input" || tagName === "textarea");
+      if (isEditingText) return;
+
+      const key = event.key.toLowerCase();
+      const ctrlOrMeta = event.ctrlKey || event.metaKey;
+
+      if (!ctrlOrMeta) return;
+
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [redo, undo]);
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      applyGraphChange((current) => ({
+        ...current,
+        nodes: applyNodeChanges(changes, current.nodes),
+      }));
+    },
+    [applyGraphChange]
+  );
+
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      applyGraphChange((current) => ({
+        ...current,
+        edges: applyEdgeChanges(changes, current.edges),
+      }));
+    },
+    [applyGraphChange]
+  );
 
   useEffect(() => {
     if (!command) return;
@@ -269,41 +384,43 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
         position: { x: 90 + index * 18, y: layerY[nodeType] },
         draggable: true,
       };
-      setNodes((currentNodes) => [...currentNodes, newNode]);
+      applyGraphChange((current) => ({ ...current, nodes: [...current.nodes, newNode] }));
       return;
     }
 
     if (command.action === "reset") {
-      setNodes(buildInitialNodes(architecture));
-      setEdges(buildInitialEdges(architecture));
+      applyGraphChange(() => ({
+        nodes: buildInitialNodes(architecture),
+        edges: buildInitialEdges(architecture),
+      }));
       return;
     }
 
     if (command.action === "clear") {
-      setNodes([]);
-      setEdges([]);
+      applyGraphChange(() => ({ nodes: [], edges: [] }));
     }
-  }, [architecture, command, setEdges, setNodes]);
+  }, [architecture, command, applyGraphChange]);
 
   const onConnect = (connection: Connection) => {
-    setEdges((currentEdges) =>
-      addEdge(
+    applyGraphChange((current) => ({
+      ...current,
+      edges: addEdge(
         {
           ...connection,
           type: "smoothstep",
           style: { stroke: "#64748b", strokeWidth: 1.8 },
           markerEnd: { type: MarkerType.ArrowClosed },
         },
-        currentEdges
-      )
-    );
+        current.edges
+      ),
+    }));
   };
 
   return (
     <div className="diagram-canvas">
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={graph.nodes}
+        edges={graph.edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
