@@ -1,21 +1,105 @@
-# ArchitectAI (Minimal, Disk-Efficient Setup)
+# ArchitectAI
 
-## Required Structure
+ArchitectAI is a full-stack architecture generation and editing app:
 
-- backend/
-- frontend/
-- scripts/
-- data/synthetic/
-- checkpoints/
-- reports/
-- docs/
-- .gitignore
-- requirements.txt
-- README.md
+- Frontend: React + Vite + React Flow visual editor
+- Backend: FastAPI API gateway
+- Model service: FastAPI inference service (separate container)
 
-## Dependency Installation (uv only)
+The project is containerized and designed to run with one command.
 
-Use one environment only:
+## Quick Start (Docker Compose)
+
+From project root:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- Model service: http://localhost:9000
+
+Stop services:
+
+```bash
+docker compose down
+```
+
+## Flatpak VS Code Note
+
+If your shell is inside Flatpak VS Code and `docker` is not visible, run host Docker with:
+
+```bash
+flatpak-spawn --host sh -lc 'cd /home/earnest/Downloads/Ai_Architecture_Generator && docker compose up --build'
+```
+
+Validate compose config from the same environment:
+
+```bash
+flatpak-spawn --host sh -lc 'cd /home/earnest/Downloads/Ai_Architecture_Generator && docker compose config'
+```
+
+## Services
+
+### frontend
+
+- Build context: `frontend/`
+- Dockerfile: `frontend/Dockerfile`
+- Runtime port: `5173`
+- Serves production build using `serve`
+
+### backend
+
+- Build context: project root, Dockerfile `backend/Dockerfile`
+- Runtime port: `8000`
+- Entry command:
+	- `uvicorn backend.api.main:app --host 0.0.0.0 --port 8000`
+- Handles parser + orchestration
+- Calls model service when `MODEL_URL` is set
+
+### model
+
+- Build context: project root, Dockerfile `backend/Dockerfile`
+- Runtime port: `9000`
+- Entry command:
+	- `uvicorn backend.api.model_service:app --host 0.0.0.0 --port 9000`
+- Exposes inference endpoint for backend:
+	- `POST /infer`
+
+## Environment Variables
+
+Configured via `.env` (example in `.env.example`):
+
+- `VITE_API_URL`
+	- Frontend API base URL at build time
+	- Default: `http://localhost:8000`
+- `FRONTEND_ORIGIN`
+	- Backend CORS allow-list (comma-separated)
+	- Default: `http://localhost:5173`
+- `MODEL_URL`
+	- Backend to model internal URL
+	- Default: `http://model:9000`
+
+## Health Endpoints
+
+- Backend: `GET /healthz`
+- Model: `GET /healthz`
+
+Compose healthchecks use these endpoints for startup ordering.
+
+## Docker Files
+
+- Root compose file: `docker-compose.yml`
+- Root ignore: `.dockerignore`
+- Frontend ignore: `frontend/.dockerignore`
+- Backend ignore: `backend/.dockerignore`
+
+## Local (Non-Docker) Setup
+
+If you want to run locally without containers:
 
 ```bash
 uv venv .venv
@@ -23,70 +107,22 @@ source .venv/bin/activate
 uv pip install -r requirements.txt --no-cache
 ```
 
-Rules:
-- Do not use pip install
-- Do not cache wheels
-- Do not duplicate installs
-
-## Minimal Requirements
-
-requirements.txt contains only:
-- torch
-- torchvision
-- timm
-- transformers
-- peft
-- bitsandbytes
-- accelerate
-- fastapi
-- uvicorn
-- pydantic
-- python-multipart
-- pillow
-- matplotlib
-- scikit-learn
-- nltk
-- rouge-score
-
-## Model Cache Control
-
-Use one HuggingFace cache location:
+Suggested cache location:
 
 ```bash
 export HF_HOME=./.cache/huggingface
 ```
 
-After first download, reload with local_files_only=True.
-
-## Checkpoint Rules
-
-Keep only final checkpoints:
-- checkpoints/convnext_best.pt
-- checkpoints/qwen_lora/
-
-No intermediate checkpoints. Overwrite existing files.
-
-## Data Rules
-
-- Maximum dataset size: 1000 samples
-- Avoid large PNG datasets
-- Prefer on-the-fly generation where possible
-
-## Validation
-
-1. Verify uv environment works
-2. Verify torch detects GPU
-3. Verify transformers loads once, then local-only
-
-Example validation commands:
+Run backend:
 
 ```bash
-source .venv/bin/activate
-export HF_HOME=./.cache/huggingface
-python -c "import torch; print('torch', torch.__version__); print('cuda', torch.cuda.is_available())"
-python -c "from transformers import AutoTokenizer; m='sshleifer/tiny-gpt2'; AutoTokenizer.from_pretrained(m); AutoTokenizer.from_pretrained(m, local_files_only=True); print('ok')"
+uvicorn backend.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-## Goal
+Run frontend:
 
-Keep the project lightweight and reproducible, targeting total size around 3-5GB.
+```bash
+cd frontend
+npm install
+npm run dev
+```
