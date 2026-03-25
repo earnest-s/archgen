@@ -62,9 +62,9 @@ type NodeData = {
   label: string;
 };
 
-function UiNode({ data }: NodeProps<NodeData>) {
+function UiNode({ data, selected }: NodeProps<NodeData>) {
   return (
-    <div className={`arch-node arch-node-ui ${data.selected ? "selected" : ""}`}>
+    <div className={`arch-node arch-node-ui ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
       <Globe size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
@@ -73,9 +73,9 @@ function UiNode({ data }: NodeProps<NodeData>) {
   );
 }
 
-function ServiceNode({ data }: NodeProps<NodeData>) {
+function ServiceNode({ data, selected }: NodeProps<NodeData>) {
   return (
-    <div className={`arch-node arch-node-service ${data.selected ? "selected" : ""}`}>
+    <div className={`arch-node arch-node-service ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
       <Server size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
@@ -84,9 +84,9 @@ function ServiceNode({ data }: NodeProps<NodeData>) {
   );
 }
 
-function DataNode({ data }: NodeProps<NodeData>) {
+function DataNode({ data, selected }: NodeProps<NodeData>) {
   return (
-    <div className={`arch-node arch-node-data ${data.selected ? "selected" : ""}`}>
+    <div className={`arch-node arch-node-data ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
       <Database size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
@@ -95,9 +95,9 @@ function DataNode({ data }: NodeProps<NodeData>) {
   );
 }
 
-function CacheNode({ data }: NodeProps<NodeData>) {
+function CacheNode({ data, selected }: NodeProps<NodeData>) {
   return (
-    <div className={`arch-node arch-node-cache ${data.selected ? "selected" : ""}`}>
+    <div className={`arch-node arch-node-cache ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
       <Zap size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
@@ -106,9 +106,9 @@ function CacheNode({ data }: NodeProps<NodeData>) {
   );
 }
 
-function QueueNode({ data }: NodeProps<NodeData>) {
+function QueueNode({ data, selected }: NodeProps<NodeData>) {
   return (
-    <div className={`arch-node arch-node-queue ${data.selected ? "selected" : ""}`}>
+    <div className={`arch-node arch-node-queue ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
       <Layers size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
