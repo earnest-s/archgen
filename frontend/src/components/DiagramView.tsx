@@ -793,7 +793,7 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
             return {
               ...node,
               parentNode: container.id,
-              extent: "parent",
+              extent: "parent" as const,
               position: {
                 x: abs.x - containerAbs.x,
                 y: abs.y - containerAbs.y,
