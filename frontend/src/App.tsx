@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useRef, useState } from "react";
 import DiagramView from "./components/DiagramView";
 
 const defaultJson = {
@@ -55,7 +55,7 @@ function App() {
     setEditorCommand({ id: commandIdRef.current, action });
   };
 
-  const onDragNodeTemplate = (event: React.DragEvent<HTMLButtonElement>, nodeType: EditorNodeType) => {
+  const onDragNodeTemplate = (event: DragEvent<HTMLButtonElement>, nodeType: EditorNodeType) => {
     event.dataTransfer.setData("application/x-arch-node", nodeType);
     event.dataTransfer.effectAllowed = "move";
   };
@@ -173,6 +173,7 @@ function App() {
 
         <div className="tool-section">
           <h2>Node Tools</h2>
+          <p className="sub">Drag an item onto the canvas to create a node.</p>
           <div className="tool-grid">
             <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "ui")}>UI</button>
             <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "service")}>Service</button>
