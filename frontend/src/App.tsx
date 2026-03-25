@@ -4,8 +4,11 @@ const defaultJson = {
   nodes: ["frontend", "backend", "database"],
 };
 
+const defaultText = "3-tier app with frontend, backend, database";
+
 function App() {
-  const [input, setInput] = useState(JSON.stringify(defaultJson, null, 2));
+  const [mode, setMode] = useState<"text" | "json">("text");
+  const [input, setInput] = useState(defaultText);
   const [output, setOutput] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -14,12 +17,23 @@ function App() {
     setError("");
     setOutput("");
 
-    let parsedInput: unknown;
-    try {
-      parsedInput = JSON.parse(input);
-    } catch {
-      setError("Invalid JSON. Please fix the input and try again.");
-      return;
+    let body: Record<string, unknown>;
+    if (mode === "json") {
+      let parsedInput: unknown;
+      try {
+        parsedInput = JSON.parse(input);
+      } catch {
+        setError("Invalid JSON. Please fix the input and try again.");
+        return;
+      }
+      body = { architecture: parsedInput };
+    } else {
+      const text = input.trim();
+      if (!text) {
+        setError("Please enter architecture text.");
+        return;
+      }
+      body = { text };
     }
 
     setLoading(true);
@@ -27,7 +41,7 @@ function App() {
       const response = await fetch("http://127.0.0.1:8000/explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ architecture: parsedInput }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -56,9 +70,32 @@ function App() {
     <main className="page">
       <section className="card">
         <h1>ArchitectAI</h1>
-        <p className="sub">Paste architecture JSON and generate an explanation.</p>
+        <p className="sub">Enter architecture as plain text or JSON and generate an explanation.</p>
 
-        <label htmlFor="architecture-input">Architecture JSON</label>
+        <div className="mode-toggle">
+          <button
+            className={`mode-btn ${mode === "text" ? "active" : ""}`}
+            type="button"
+            onClick={() => {
+              setMode("text");
+              setInput(defaultText);
+            }}
+          >
+            Text Mode
+          </button>
+          <button
+            className={`mode-btn ${mode === "json" ? "active" : ""}`}
+            type="button"
+            onClick={() => {
+              setMode("json");
+              setInput(JSON.stringify(defaultJson, null, 2));
+            }}
+          >
+            JSON Mode
+          </button>
+        </div>
+
+        <label htmlFor="architecture-input">{mode === "json" ? "Architecture JSON" : "Architecture Description"}</label>
         <textarea
           id="architecture-input"
           value={input}
