@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Database, Globe, Layers, Server, Zap } from "lucide-react";
 import ReactFlow, {
   addEdge,
   Background,
@@ -62,11 +61,63 @@ type NodeData = {
   label: string;
 };
 
+type GlyphKind = "ui" | "service" | "data" | "cache" | "queue";
+
+function NodeGlyph({ kind }: { kind: GlyphKind }) {
+  const common = { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 };
+
+  if (kind === "ui") {
+    return (
+      <svg {...common} className="arch-node-icon">
+        <rect x="3" y="4" width="18" height="12" rx="2" />
+        <path d="M8 20h8" />
+        <path d="M12 16v4" />
+      </svg>
+    );
+  }
+
+  if (kind === "service") {
+    return (
+      <svg {...common} className="arch-node-icon">
+        <rect x="3" y="4" width="18" height="6" rx="1" />
+        <rect x="3" y="14" width="18" height="6" rx="1" />
+        <path d="M7 7h.01" />
+        <path d="M7 17h.01" />
+      </svg>
+    );
+  }
+
+  if (kind === "data") {
+    return (
+      <svg {...common} className="arch-node-icon">
+        <ellipse cx="12" cy="6" rx="8" ry="3" />
+        <path d="M4 6v8c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
+      </svg>
+    );
+  }
+
+  if (kind === "cache") {
+    return (
+      <svg {...common} className="arch-node-icon">
+        <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common} className="arch-node-icon">
+      <rect x="4" y="5" width="16" height="4" rx="1" />
+      <rect x="4" y="10" width="16" height="4" rx="1" />
+      <rect x="4" y="15" width="16" height="4" rx="1" />
+    </svg>
+  );
+}
+
 function UiNode({ data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node arch-node-ui ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <Globe size={14} className="arch-node-icon" />
+      <NodeGlyph kind="ui" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -77,7 +128,7 @@ function ServiceNode({ data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node arch-node-service ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <Server size={14} className="arch-node-icon" />
+      <NodeGlyph kind="service" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -88,7 +139,7 @@ function DataNode({ data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node arch-node-data ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <Database size={14} className="arch-node-icon" />
+      <NodeGlyph kind="data" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -99,7 +150,7 @@ function CacheNode({ data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node arch-node-cache ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <Zap size={14} className="arch-node-icon" />
+      <NodeGlyph kind="cache" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -110,7 +161,7 @@ function QueueNode({ data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node arch-node-queue ${selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <Layers size={14} className="arch-node-icon" />
+      <NodeGlyph kind="queue" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
