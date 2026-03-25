@@ -36,7 +36,7 @@ def _parse_text_to_architecture(text: str) -> dict:
         if any(keyword in lowered for keyword in keywords):
             nodes.append({"id": node["id"], "type": node["type"]})
 
-    return _normalize_architecture({"nodes": nodes})
+    return {"nodes": nodes}
 
 
 def _infer_node_type(node_id: str) -> str:
@@ -136,12 +136,48 @@ def _build_edges(nodes: list[dict[str, str]]) -> list[dict[str, str]]:
     return edges
 
 
-def _normalize_architecture(raw: object) -> dict:
+def normalize_architecture(raw: object) -> dict:
     raw_nodes = raw.get("nodes") if isinstance(raw, dict) else None
     nodes = _coerce_nodes(raw_nodes)
     edges = _build_edges(nodes)
 
     return {"nodes": nodes, "edges": edges}
+
+
+def _is_valid_architecture(architecture: object) -> bool:
+    if not isinstance(architecture, dict):
+        return False
+
+    nodes = architecture.get("nodes")
+    edges = architecture.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        return False
+    if len(nodes) == 0 or len(edges) == 0:
+        return False
+
+    node_ids: set[str] = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            return False
+        node_id = node.get("id")
+        node_type = node.get("type")
+        if not isinstance(node_id, str) or not node_id:
+            return False
+        if node_type not in {"ui", "service", "data"}:
+            return False
+        node_ids.add(node_id)
+
+    for edge in edges:
+        if not isinstance(edge, dict):
+            return False
+        source = edge.get("source")
+        target = edge.get("target")
+        if not isinstance(source, str) or not isinstance(target, str):
+            return False
+        if source not in node_ids or target not in node_ids:
+            return False
+
+    return True
 
 
 @app.post("/explain")
@@ -153,12 +189,19 @@ async def explain(payload: dict):
 
     text = payload.get("text")
     if isinstance(text, str) and text.strip():
-        architecture = _parse_text_to_architecture(text.strip())
+        parsed = _parse_text_to_architecture(text.strip())
+        architecture = normalize_architecture(parsed)
     elif payload.get("architecture") is not None:
-        architecture = _normalize_architecture(payload.get("architecture"))
+        architecture = normalize_architecture(payload.get("architecture"))
 
     if architecture is None:
         raise HTTPException(status_code=400, detail="Provide either 'architecture' (JSON) or 'text' (natural language).")
+
+    architecture = normalize_architecture(architecture)
+    if not _is_valid_architecture(architecture):
+        raise HTTPException(status_code=500, detail="Invalid architecture generated")
+
+    print("FINAL ARCH:", architecture)
 
     explanation = generate_explanation(architecture)
     return {"explanation": explanation, "architecture": architecture}
