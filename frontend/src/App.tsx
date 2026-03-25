@@ -33,12 +33,11 @@ type Architecture = {
   [key: string]: unknown;
 };
 
-type EditorNodeType = "ui" | "service" | "data" | "cache" | "queue";
+type EditorNodeType = "ui" | "service" | "data" | "cache" | "queue" | "container";
 
 type EditorCommand = {
   id: number;
-  action: "add" | "reset" | "clear";
-  nodeType?: EditorNodeType;
+  action: "reset" | "clear";
 };
 
 function App() {
@@ -51,9 +50,14 @@ function App() {
   const [editorCommand, setEditorCommand] = useState<EditorCommand | null>(null);
   const commandIdRef = useRef(0);
 
-  const sendEditorCommand = (action: EditorCommand["action"], nodeType?: EditorNodeType) => {
+  const sendEditorCommand = (action: EditorCommand["action"]) => {
     commandIdRef.current += 1;
-    setEditorCommand({ id: commandIdRef.current, action, nodeType });
+    setEditorCommand({ id: commandIdRef.current, action });
+  };
+
+  const onDragNodeTemplate = (event: React.DragEvent<HTMLButtonElement>, nodeType: EditorNodeType) => {
+    event.dataTransfer.setData("application/x-arch-node", nodeType);
+    event.dataTransfer.effectAllowed = "move";
   };
 
   const onGenerate = async () => {
@@ -170,11 +174,12 @@ function App() {
         <div className="tool-section">
           <h2>Node Tools</h2>
           <div className="tool-grid">
-            <button type="button" className="tool-btn" onClick={() => sendEditorCommand("add", "ui")}>Add UI node</button>
-            <button type="button" className="tool-btn" onClick={() => sendEditorCommand("add", "service")}>Add Service node</button>
-            <button type="button" className="tool-btn" onClick={() => sendEditorCommand("add", "data")}>Add Database node</button>
-            <button type="button" className="tool-btn" onClick={() => sendEditorCommand("add", "cache")}>Add Cache node</button>
-            <button type="button" className="tool-btn" onClick={() => sendEditorCommand("add", "queue")}>Add Queue node</button>
+            <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "ui")}>UI</button>
+            <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "service")}>Service</button>
+            <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "data")}>Database</button>
+            <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "cache")}>Cache</button>
+            <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "queue")}>Queue</button>
+            <button type="button" draggable className="tool-btn draggable" onDragStart={(event) => onDragNodeTemplate(event, "container")}>Container</button>
           </div>
           <div className="tool-row">
             <button type="button" className="tool-btn" onClick={() => sendEditorCommand("reset")}>Reset Layout</button>
