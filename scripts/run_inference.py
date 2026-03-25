@@ -20,16 +20,22 @@ def clean_structured_output(text: str, max_words: int = 150) -> str:
     positions = [cleaned.find(name) for name in section_names]
 
     if all(pos >= 0 for pos in positions) and positions == sorted(positions):
-        cleaned = cleaned[positions[0]:]
-        arch_start = cleaned.find("Architecture type:")
-        arch_end = len(cleaned)
+        comp_start, flow_start, arch_start = positions
+        components_block = cleaned[comp_start:flow_start].strip()
+        flow_block = cleaned[flow_start:arch_start].strip()
+        arch_block = cleaned[arch_start:].strip()
 
-        for marker in ("Human:", "Assistant:", "User:", "###", "\n\n"):
-            idx = cleaned.find(marker, arch_start + len("Architecture type:"))
-            if idx != -1:
-                arch_end = min(arch_end, idx)
+        arch_content = arch_block[len("Architecture type:"):].strip()
+        sentence_end = -1
+        for punct in (".", "!", "?"):
+            idx = arch_content.find(punct)
+            if idx != -1 and (sentence_end == -1 or idx < sentence_end):
+                sentence_end = idx
+        if sentence_end != -1:
+            arch_content = arch_content[: sentence_end + 1].strip()
 
-        cleaned = cleaned[:arch_end].strip()
+        arch_block = f"Architecture type: {arch_content}" if arch_content else "Architecture type:"
+        cleaned = "\n".join([components_block, flow_block, arch_block]).strip()
 
     words = cleaned.split()
     if len(words) > max_words:
