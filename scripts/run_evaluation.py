@@ -2,6 +2,7 @@
 import difflib
 import json
 import os
+import argparse
 from pathlib import Path
 from typing import Dict, List
 
@@ -35,8 +36,16 @@ def compute_bleu(reference: str, hypothesis: str) -> float:
     return sentence_bleu([reference.split()], hypothesis.split(), smoothing_function=smoothie)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Evaluate LoRA model with BLEU-4 and ROUGE-L.")
+    parser.add_argument("--max-samples", type=int, default=100)
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     os.environ.setdefault("HF_HOME", "./.cache/huggingface")
+    print("[STEP 3/3] Evaluation started")
 
     dataset_path = Path("data/synthetic/dataset.jsonl")
     adapter_path = Path("checkpoints/qwen_lora")
@@ -52,8 +61,10 @@ def main() -> None:
         raise FileNotFoundError(f"Missing LoRA adapter: {adapter_path}")
 
     rows = load_dataset(dataset_path)
+    rows = rows[: max(1, args.max_samples)]
     if not rows:
         raise RuntimeError("Dataset is empty.")
+    print(f"[INFO] Loaded {len(rows)} evaluation samples from {dataset_path}")
 
     model_id = "Qwen/Qwen2.5-1.5B-Instruct"
     tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -119,6 +130,9 @@ def main() -> None:
             for line in diff:
                 print(line)
 
+        if (idx + 1) % 50 == 0:
+            print(f"[INFO] Evaluated {idx + 1}/{len(rows)} samples")
+
     avg_bleu = sum(bleu_scores) / len(bleu_scores)
     avg_rouge = sum(rouge_scores) / len(rouge_scores)
 
@@ -138,6 +152,7 @@ def main() -> None:
         )
 
     print(f"Saved evaluation report to {report_path}")
+    print("[STEP 3/3] Evaluation completed")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
-# ArchitectAI (Minimal Setup)
+# ArchitectAI (Minimal, Disk-Efficient Setup)
 
-Lightweight, reproducible project scaffold optimized for low disk usage.
-
-## Project layout
+## Required Structure
 
 - backend/
 - frontend/
@@ -15,77 +13,80 @@ Lightweight, reproducible project scaffold optimized for low disk usage.
 - requirements.txt
 - README.md
 
-## 1) Create a single uv environment
+## Dependency Installation (uv only)
+
+Use one environment only:
 
 ```bash
 uv venv .venv
 source .venv/bin/activate
-```
-
-Use only one environment for everything.
-
-## 2) Install dependencies (uv only)
-
-```bash
 uv pip install -r requirements.txt --no-cache
 ```
 
-CUDA note:
-- Current pinned stack uses torch==2.11.0 and torchvision==0.26.0.
-- If you need a clean reinstall, run:
+Rules:
+- Do not use pip install
+- Do not cache wheels
+- Do not duplicate installs
 
-```bash
-uv pip uninstall -y torch torchvision
-uv pip install -r requirements.txt --no-cache
-```
+## Minimal Requirements
 
-Rules enforced:
-- No pip install
-- No wheel caching
-- Single environment only
+requirements.txt contains only:
+- torch
+- torchvision
+- timm
+- transformers
+- peft
+- bitsandbytes
+- accelerate
+- fastapi
+- uvicorn
+- pydantic
+- python-multipart
+- pillow
+- matplotlib
+- scikit-learn
+- nltk
+- rouge-score
 
-## 3) Model cache control (single location)
+## Model Cache Control
 
-Always set:
+Use one HuggingFace cache location:
 
 ```bash
 export HF_HOME=./.cache/huggingface
 ```
 
-After first model download, reload using local files only.
+After first download, reload with local_files_only=True.
 
-## 4) Checkpoint policy
+## Checkpoint Rules
 
-Keep only final artifacts:
+Keep only final checkpoints:
 - checkpoints/convnext_best.pt
 - checkpoints/qwen_lora/
 
-Do not keep intermediate checkpoints. Overwrite instead of creating new files.
+No intermediate checkpoints. Overwrite existing files.
 
-## 5) Data policy
+## Data Rules
 
 - Maximum dataset size: 1000 samples
-- Avoid saving large PNG sets by default
-- Prefer on-the-fly generation unless explicitly needed
+- Avoid large PNG datasets
+- Prefer on-the-fly generation where possible
 
-Use:
+## Validation
+
+1. Verify uv environment works
+2. Verify torch detects GPU
+3. Verify transformers loads once, then local-only
+
+Example validation commands:
 
 ```bash
-python scripts/generate_synthetic.py --num-samples 1000
-```
-
-## 6) Validation
-
-```bash
+source .venv/bin/activate
 export HF_HOME=./.cache/huggingface
-python scripts/validate_setup.py --model-id sshleifer/tiny-gpt2
+python -c "import torch; print('torch', torch.__version__); print('cuda', torch.cuda.is_available())"
+python -c "from transformers import AutoTokenizer; m='sshleifer/tiny-gpt2'; AutoTokenizer.from_pretrained(m); AutoTokenizer.from_pretrained(m, local_files_only=True); print('ok')"
 ```
 
-Validation checks:
-- uv environment is active
-- torch import and GPU availability report
-- transformers model is downloaded once, then loaded from local cache only
+## Goal
 
-## Disk target
-
-Keep total project footprint around 3-5GB by avoiding duplicate checkpoints, repeated model downloads, and unnecessary generated image datasets.
+Keep the project lightweight and reproducible, targeting total size around 3-5GB.

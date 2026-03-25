@@ -83,6 +83,9 @@ def main() -> None:
     args = parse_args()
     os.environ.setdefault("HF_HOME", "./.cache/huggingface")
 
+    print("[STEP 2/3] Qwen LoRA training started")
+    print(f"[INFO] model={args.model_id} 4bit=True batch_size={max(1, min(args.batch_size, 2))} grad_accum={args.grad_accum} epochs={args.epochs}")
+
     if not torch.cuda.is_available():
         raise RuntimeError("GPU is required for this training script.")
 
@@ -93,6 +96,7 @@ def main() -> None:
     rows = load_dataset(dataset_path, args.max_train_samples)
     if not rows:
         raise RuntimeError("Dataset is empty.")
+    print(f"[INFO] Loaded {len(rows)} training samples from {dataset_path}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
     if tokenizer.pad_token is None:
@@ -151,7 +155,11 @@ def main() -> None:
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(output_dir)
+    readme = output_dir / "README.md"
+    if readme.exists():
+        readme.unlink()
     print(f"Saved LoRA adapter to {output_dir}")
+    print("[STEP 2/3] Qwen LoRA training completed")
 
 
 if __name__ == "__main__":

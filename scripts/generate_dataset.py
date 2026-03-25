@@ -137,7 +137,10 @@ def generate_records(total: int, seed: int) -> List[Dict[str, object]]:
 
 def main() -> None:
     args = parse_args()
-    count = max(500, min(args.num_samples, 1000))
+    count = min(max(1, args.num_samples), 500)
+
+    print("[STEP 1/3] Dataset generation started")
+    print(f"[INFO] Requested samples={args.num_samples}, capped_samples={count}")
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,7 +154,8 @@ def main() -> None:
     if args.with_png:
         print("PNG export is intentionally skipped to keep disk usage minimal.")
 
-    print(f"Generated {len(records)} unique samples at {out_path}")
+    print(f"[INFO] Generated {len(records)} unique samples at {out_path}")
+    print("[STEP 1/3] Dataset generation completed")
 
 
 if __name__ == "__main__":
