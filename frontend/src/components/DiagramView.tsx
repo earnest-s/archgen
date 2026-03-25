@@ -706,7 +706,17 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      const hasMeaningfulChange = changes.some((change) => change.type !== "select" && change.type !== "dimensions");
+      const hasMeaningfulChange = changes.some((change) => {
+        if (change.type === "select" || change.type === "dimensions") return false;
+
+        // Drag emits many transient position updates; history is committed on drag stop.
+        if (change.type === "position") {
+          const dragging = "dragging" in change ? Boolean(change.dragging) : false;
+          return !dragging;
+        }
+
+        return true;
+      });
       applyGraphChange((current) => ({
         ...current,
         nodes: applyNodeChanges(changes, current.nodes),
@@ -817,7 +827,10 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
 
           return {
             ...node,
-            position: abs,
+            position: {
+              x: abs.x,
+              y: abs.y,
+            },
           };
         });
 
