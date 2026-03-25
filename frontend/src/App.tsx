@@ -1,4 +1,5 @@
 import { ChangeEvent, useState } from "react";
+import DiagramView from "./components/DiagramView";
 
 const defaultJson = {
   nodes: ["frontend", "backend", "database"],
@@ -10,12 +11,42 @@ function App() {
   const [mode, setMode] = useState<"text" | "json">("text");
   const [input, setInput] = useState(defaultText);
   const [output, setOutput] = useState("");
+  const [architecture, setArchitecture] = useState<{ nodes: string[] } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const architectureFromText = (text: string): { nodes: string[] } => {
+    const lowered = text.toLowerCase();
+    const nodes: string[] = [];
+    if (lowered.includes("frontend")) nodes.push("frontend");
+    if (lowered.includes("backend")) nodes.push("backend");
+    if (lowered.includes("database") || lowered.includes(" db ") || lowered.startsWith("db ") || lowered.endsWith(" db")) nodes.push("database");
+    if (nodes.length === 0) return { nodes: ["frontend", "backend", "database"] };
+    return { nodes };
+  };
+
+  const architectureFromJson = (inputJson: unknown): { nodes: string[] } | null => {
+    if (!inputJson || typeof inputJson !== "object") return null;
+    const value = inputJson as { nodes?: unknown[] };
+    if (!Array.isArray(value.nodes)) return null;
+
+    const nodes = value.nodes
+      .map((n) => {
+        if (typeof n === "string") return n;
+        if (n && typeof n === "object" && "label" in n && typeof (n as { label?: unknown }).label === "string") {
+          return (n as { label: string }).label;
+        }
+        return "";
+      })
+      .filter((n) => n.length > 0);
+
+    return nodes.length > 0 ? { nodes } : null;
+  };
 
   const onGenerate = async () => {
     setError("");
     setOutput("");
+    setArchitecture(null);
 
     let body: Record<string, unknown>;
     if (mode === "json") {
@@ -27,6 +58,7 @@ function App() {
         return;
       }
       body = { architecture: parsedInput };
+      setArchitecture(architectureFromJson(parsedInput));
     } else {
       const text = input.trim();
       if (!text) {
@@ -34,6 +66,7 @@ function App() {
         return;
       }
       body = { text };
+      setArchitecture(architectureFromText(text));
     }
 
     setLoading(true);
@@ -113,6 +146,13 @@ function App() {
           <h2>Explanation</h2>
           <pre>{output || "No output yet."}</pre>
         </div>
+
+        {architecture ? (
+          <div className="diagram-panel">
+            <h2>Architecture Diagram</h2>
+            <DiagramView architecture={architecture} />
+          </div>
+        ) : null}
       </section>
     </main>
   );
