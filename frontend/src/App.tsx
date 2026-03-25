@@ -31,8 +31,15 @@ function App() {
       });
 
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Request failed.");
+        let backendMessage = "Request failed.";
+        try {
+          const errorJson = (await response.json()) as { detail?: string };
+          backendMessage = errorJson.detail || backendMessage;
+        } catch {
+          const text = await response.text();
+          backendMessage = text || backendMessage;
+        }
+        throw new Error(backendMessage);
       }
 
       const data = (await response.json()) as { explanation?: string };
