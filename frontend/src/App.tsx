@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { ChangeEvent, useState } from "react";
 
 const defaultJson = {
   nodes: ["frontend", "backend", "database"],
@@ -55,7 +55,7 @@ function App() {
         <textarea
           id="architecture-input"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setInput(e.target.value)}
           rows={12}
         />
 
