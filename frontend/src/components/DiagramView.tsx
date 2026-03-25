@@ -3,6 +3,7 @@ import ReactFlow, {
   addEdge,
   Background,
   Connection,
+  ConnectionLineType,
   Controls,
   Edge,
   Handle,
@@ -236,7 +237,7 @@ function DiagramViewInner({ architecture }: DiagramViewProps) {
         nodesDraggable
         elementsSelectable
         deleteKeyCode={["Backspace", "Delete"]}
-        connectionLineType="smoothstep"
+        connectionLineType={ConnectionLineType.SmoothStep}
       >
         <Background color="#e5e7eb" gap={18} />
         <Controls showInteractive />
