@@ -1,6 +1,8 @@
 import { ChangeEvent, DragEvent, useRef, useState } from "react";
 import DiagramView from "./components/DiagramView";
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+
 const defaultJson = {
   nodes: [
     { id: "frontend", type: "ui" },
@@ -85,7 +87,7 @@ function App() {
 
     setLoading(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/explain", {
+      const response = await fetch(`${API_BASE_URL}/explain`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
