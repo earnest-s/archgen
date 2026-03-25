@@ -25,7 +25,10 @@ def load_dataset(path: Path) -> List[Dict[str, object]]:
 
 def build_prompt(architecture: Dict[str, object]) -> str:
     return (
-        "You are an AI architecture assistant. Explain this architecture briefly and clearly.\n"
+        "You are an AI architecture assistant. Explain clearly using exactly these sections:\n"
+        "Components:\n"
+        "Data flow:\n"
+        "Architecture type:\n"
         f"Architecture JSON: {json.dumps(architecture, ensure_ascii=True)}\n"
         "Explanation:"
     )
@@ -94,17 +97,20 @@ def main() -> None:
         prompt = build_prompt(row["architecture"])
         inputs = tokenizer(prompt, return_tensors="pt")
         inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        input_len = inputs["input_ids"].shape[1]
 
         with torch.inference_mode():
             out_ids = model.generate(
                 **inputs,
-                max_new_tokens=64,
+                max_new_tokens=120,
                 do_sample=False,
                 eos_token_id=tokenizer.eos_token_id,
             )
 
-        generated = tokenizer.decode(out_ids[0], skip_special_tokens=True)
-        generated = generated.split("Explanation:")[-1].strip()
+        generated = tokenizer.decode(out_ids[0][input_len:], skip_special_tokens=True).strip()
+        for prefix in ("Explanation:", "Answer:"):
+            if generated.startswith(prefix):
+                generated = generated[len(prefix):].strip()
 
         reference = row["explanation"].strip()
 

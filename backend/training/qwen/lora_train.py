@@ -27,7 +27,10 @@ class TextDataset(Dataset):
         target = row["explanation"]
 
         prompt = (
-            "You are an AI architecture assistant. Explain briefly and clearly.\n"
+            "You are an AI architecture assistant. Explain clearly using exactly these sections:\n"
+            "Components:\n"
+            "Data flow:\n"
+            "Architecture type:\n"
             f"Architecture JSON: {architecture}\n"
             "Explanation:"
         )

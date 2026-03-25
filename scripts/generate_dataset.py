@@ -82,11 +82,44 @@ def make_edges(pattern: str, nodes: List[Dict[str, str]]) -> List[Dict[str, str]
     ]
 
 
-def make_explanation(pattern: str, architecture: Dict[str, object]) -> str:
-    node_labels = ", ".join(n["label"] for n in architecture["nodes"])
+def make_explanation(pattern: str, architecture: Dict[str, object], rng: random.Random) -> str:
+    node_labels = [n["label"] for n in architecture["nodes"]]
+    components_csv = ", ".join(node_labels)
+
+    component_templates = [
+        "The main components are {components}.",
+        "This design includes {components} as core building blocks.",
+        "Key system parts are {components}.",
+    ]
+
+    flow_templates = [
+        "Traffic moves through {paths}.",
+        "Data exchanges follow {paths}.",
+        "Primary communication paths are {paths}.",
+    ]
+
+    type_templates = [
+        "This follows a {pattern} architecture style optimized for clear service boundaries.",
+        "Overall, this is a {pattern} architecture emphasizing separation of responsibilities.",
+        "Architecture type: {pattern}; components are organized for predictable request handling.",
+    ]
+
+    paths = []
+    id_to_label = {n["id"]: n["label"] for n in architecture["nodes"]}
+    for edge in architecture["edges"]:
+        src = id_to_label.get(edge["from"], edge["from"])
+        dst = id_to_label.get(edge["to"], edge["to"])
+        protocol = edge["protocol"]
+        paths.append(f"{src} -> {dst} via {protocol}")
+
+    components_line = rng.choice(component_templates).format(components=components_csv)
+    flow_line = rng.choice(flow_templates).format(paths="; ".join(paths))
+    type_line = rng.choice(type_templates).format(pattern=pattern)
+
     return (
-        f"This is a {pattern} architecture with components: {node_labels}. "
-        f"Data flows across {len(architecture['edges'])} links with clear service boundaries."
+        f"Components: {components_line}\n"
+        f"Data flow: {flow_line}\n"
+        f"Architecture type: {type_line}"
     )
 
 
@@ -128,7 +161,7 @@ def generate_records(total: int, seed: int) -> List[Dict[str, object]]:
         records.append(
             {
                 "architecture": architecture,
-                "explanation": make_explanation(pattern, architecture),
+                "explanation": make_explanation(pattern, architecture, rng),
             }
         )
 
@@ -137,7 +170,7 @@ def generate_records(total: int, seed: int) -> List[Dict[str, object]]:
 
 def main() -> None:
     args = parse_args()
-    count = min(max(1, args.num_samples), 500)
+    count = min(max(1, args.num_samples), 800)
 
     print("[STEP 1/3] Dataset generation started")
     print(f"[INFO] Requested samples={args.num_samples}, capped_samples={count}")
