@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -15,6 +15,8 @@ import ReactFlow, {
   NodeProps,
   Position,
   ReactFlowProvider,
+  ReactFlowInstance,
+  useReactFlow,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -35,12 +37,11 @@ type Architecture = {
   edges: ArchitectureEdge[];
 };
 
-type EditorNodeType = "ui" | "service" | "data" | "cache" | "queue";
+type EditorNodeType = "ui" | "service" | "data" | "cache" | "queue" | "container";
 
 type EditorCommand = {
   id: number;
-  action: "add" | "reset" | "clear";
-  nodeType?: EditorNodeType;
+  action: "reset" | "clear";
 };
 
 type DiagramViewProps = {
@@ -49,15 +50,25 @@ type DiagramViewProps = {
 };
 
 type FlowNodeKind = "ui" | "service" | "database" | "cache" | "container" | "gateway" | "queue";
+type EdgeProtocol = "request" | "HTTP" | "gRPC" | "Queue" | "DB Query";
+type EdgeLine = "sync" | "async";
 
 type NodeData = {
   label: string;
   kind: FlowNodeKind;
+  editing?: boolean;
+  onStartEdit?: (nodeId: string) => void;
+  onCommitLabel?: (nodeId: string, label: string) => void;
+};
+
+type EdgeData = {
+  edgeType: EdgeProtocol;
+  lineStyle: EdgeLine;
 };
 
 type GraphState = {
   nodes: Node<NodeData>[];
-  edges: Edge[];
+  edges: Edge<EdgeData>[];
 };
 
 type LayerType = "ui" | "service" | "data";
@@ -68,11 +79,17 @@ const layerY: Record<LayerType, number> = {
   data: 430,
 };
 
+const CONTAINER_WIDTH = 340;
+const CONTAINER_HEIGHT = 230;
+const DEFAULT_NODE_WIDTH = 150;
+const DEFAULT_NODE_HEIGHT = 40;
+
 const iconMap: Record<string, string> = {
   docker: "https://cdn.simpleicons.org/docker",
   postgresql: "https://cdn.simpleicons.org/postgresql",
   postgres: "https://cdn.simpleicons.org/postgresql",
   mysql: "https://cdn.simpleicons.org/mysql",
+  mariadb: "https://cdn.simpleicons.org/mariadb",
   mongodb: "https://cdn.simpleicons.org/mongodb",
   redis: "https://cdn.simpleicons.org/redis",
   nginx: "https://cdn.simpleicons.org/nginx",
@@ -89,6 +106,11 @@ const iconMap: Record<string, string> = {
   aws: "https://cdn.simpleicons.org/amazonwebservices",
   gcp: "https://cdn.simpleicons.org/googlecloud",
   azure: "https://cdn.simpleicons.org/microsoftazure",
+  grpc: "https://cdn.simpleicons.org/grpc",
+  graphql: "https://cdn.simpleicons.org/graphql",
+  elasticsearch: "https://cdn.simpleicons.org/elasticsearch",
+  prometheus: "https://cdn.simpleicons.org/prometheus",
+  grafana: "https://cdn.simpleicons.org/grafana",
 };
 
 function normalizeLabel(value: string): string {
@@ -97,9 +119,14 @@ function normalizeLabel(value: string): string {
 
 function detectKindFromLabel(label: string, fallbackType?: string): FlowNodeKind {
   const normalized = normalizeLabel(label);
-
   if (normalized.includes("docker") || normalized.includes("container")) return "container";
-  if (normalized.includes("postgres") || normalized.includes("mysql") || normalized.includes("mongo") || normalized.includes("db")) {
+  if (
+    normalized.includes("postgres") ||
+    normalized.includes("mysql") ||
+    normalized.includes("mongo") ||
+    normalized.includes("db") ||
+    normalized.includes("database")
+  ) {
     return "database";
   }
   if (normalized.includes("redis") || normalized.includes("cache")) return "cache";
@@ -138,139 +165,177 @@ function nodeThemeClass(kind: FlowNodeKind): string {
 function getIconUrl(label: string): string | null {
   const normalized = normalizeLabel(label);
   if (iconMap[normalized]) return iconMap[normalized];
-
-  const match = Object.keys(iconMap).find((key) => normalized.includes(key));
-  return match ? iconMap[match] : null;
+  const key = Object.keys(iconMap).find((item) => normalized.includes(item));
+  return key ? iconMap[key] : null;
 }
 
-function FallbackGlyph({ kind }: { kind: FlowNodeKind }) {
-  const common = { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2 };
-
-  if (kind === "ui") {
-    return (
-      <svg {...common} className="arch-node-icon">
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path d="M8 20h8" />
-        <path d="M12 16v4" />
-      </svg>
-    );
-  }
-
-  if (kind === "service" || kind === "gateway") {
-    return (
-      <svg {...common} className="arch-node-icon">
-        <rect x="3" y="4" width="18" height="6" rx="1" />
-        <rect x="3" y="14" width="18" height="6" rx="1" />
-        <path d="M7 7h.01" />
-        <path d="M7 17h.01" />
-      </svg>
-    );
-  }
-
-  if (kind === "database") {
-    return (
-      <svg {...common} className="arch-node-icon">
-        <ellipse cx="12" cy="6" rx="8" ry="3" />
-        <path d="M4 6v8c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
-      </svg>
-    );
-  }
-
-  if (kind === "cache") {
-    return (
-      <svg {...common} className="arch-node-icon">
-        <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...common} className="arch-node-icon">
-      <rect x="4" y="5" width="16" height="4" rx="1" />
-      <rect x="4" y="10" width="16" height="4" rx="1" />
-      <rect x="4" y="15" width="16" height="4" rx="1" />
-    </svg>
-  );
+function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
+  style: React.CSSProperties;
+  labelStyle: React.CSSProperties;
+  labelBgStyle: React.CSSProperties;
+} {
+  const baseColor = edgeType === "HTTP" ? "#2563eb" : edgeType === "Queue" ? "#7c3aed" : "#64748b";
+  return {
+    style: {
+      stroke: baseColor,
+      strokeWidth: 2,
+      strokeDasharray: lineStyle === "async" ? "6 4" : undefined,
+    },
+    labelStyle: {
+      fontSize: 10,
+      fill: "#0f172a",
+      fontWeight: 600,
+    },
+    labelBgStyle: {
+      fill: "#f8fafc",
+      fillOpacity: 0.92,
+      stroke: "#cbd5e1",
+      strokeWidth: 1,
+    },
+  };
 }
 
-function UiNode({ data, selected }: NodeProps<NodeData>) {
-  const iconUrl = getIconUrl(data.label);
-  return (
-    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`}>
-      <Handle type="target" position={Position.Top} />
-      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <FallbackGlyph kind="ui" />}
-      <div className="arch-node-label">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  );
+function protocolFromKinds(source: Node<NodeData> | undefined, target: Node<NodeData> | undefined): EdgeProtocol {
+  if (!source || !target) return "request";
+  const targetCat = toCanonicalCategory(target.data.kind);
+  if (targetCat === "database") return "DB Query";
+  if (targetCat === "cache") return "Queue";
+  return "HTTP";
 }
 
-function ServiceNode({ data, selected }: NodeProps<NodeData>) {
-  const iconUrl = getIconUrl(data.label);
-  return (
-    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`}>
-      <Handle type="target" position={Position.Top} />
-      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <FallbackGlyph kind={data.kind} />}
-      <div className="arch-node-label">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  );
+function normalizeProtocol(value: string | null | undefined): EdgeProtocol {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "http") return "HTTP";
+  if (normalized === "grpc") return "gRPC";
+  if (normalized === "queue") return "Queue";
+  if (normalized === "db query" || normalized === "db") return "DB Query";
+  if (normalized === "request") return "request";
+  return "request";
 }
 
-function DataNode({ data, selected }: NodeProps<NodeData>) {
-  const iconUrl = getIconUrl(data.label);
-  return (
-    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`}>
-      <Handle type="target" position={Position.Top} />
-      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <FallbackGlyph kind={data.kind} />}
-      <div className="arch-node-label">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  );
-}
-
-function CacheNode({ data, selected }: NodeProps<NodeData>) {
-  const iconUrl = getIconUrl(data.label);
-  return (
-    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`}>
-      <Handle type="target" position={Position.Top} />
-      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <FallbackGlyph kind="cache" />}
-      <div className="arch-node-label">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  );
-}
-
-function QueueNode({ data, selected }: NodeProps<NodeData>) {
-  const iconUrl = getIconUrl(data.label);
-  return (
-    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`}>
-      <Handle type="target" position={Position.Top} />
-      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <FallbackGlyph kind="queue" />}
-      <div className="arch-node-label">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} />
-    </div>
-  );
-}
-
-const nodeTypes = {
-  uiNode: UiNode,
-  serviceNode: ServiceNode,
-  dataNode: DataNode,
-  cacheNode: CacheNode,
-  queueNode: QueueNode,
-};
-
-function toFlowNodeType(kind: FlowNodeKind): "uiNode" | "serviceNode" | "dataNode" | "cacheNode" | "queueNode" {
+function toFlowNodeType(kind: FlowNodeKind): "uiNode" | "serviceNode" | "dataNode" | "cacheNode" | "queueNode" | "containerNode" {
   if (kind === "ui") return "uiNode";
   if (kind === "database") return "dataNode";
   if (kind === "cache") return "cacheNode";
   if (kind === "queue") return "queueNode";
+  if (kind === "container") return "containerNode";
   return "serviceNode";
 }
 
-function edgeStyle() {
-  return { stroke: "#64748b", strokeWidth: 1.8 };
+function templateToKind(template: EditorNodeType): FlowNodeKind {
+  if (template === "data") return "database";
+  return template;
+}
+
+function getNodeSize(node: Node<NodeData>): { width: number; height: number } {
+  if (node.type === "containerNode") return { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT };
+  return { width: DEFAULT_NODE_WIDTH, height: DEFAULT_NODE_HEIGHT };
+}
+
+function getAbsolutePosition(node: Node<NodeData>, byId: Map<string, Node<NodeData>>): { x: number; y: number } {
+  if (!node.parentNode) return node.position;
+  const parent = byId.get(node.parentNode);
+  if (!parent) return node.position;
+  const parentAbs = getAbsolutePosition(parent, byId);
+  return { x: parentAbs.x + node.position.x, y: parentAbs.y + node.position.y };
+}
+
+function findContainerAtPoint(nodes: Node<NodeData>[], point: { x: number; y: number }, excludeId?: string): Node<NodeData> | undefined {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  return nodes
+    .filter((node) => node.type === "containerNode" && node.id !== excludeId)
+    .find((container) => {
+      const abs = getAbsolutePosition(container, byId);
+      const dims = getNodeSize(container);
+      return point.x >= abs.x && point.x <= abs.x + dims.width && point.y >= abs.y && point.y <= abs.y + dims.height;
+    });
+}
+
+function attachNodeCallbacks(
+  nodes: Node<NodeData>[],
+  onStartEdit: (nodeId: string) => void,
+  onCommitLabel: (nodeId: string, label: string) => void
+): Node<NodeData>[] {
+  return nodes.map((node) => ({
+    ...node,
+    data: {
+      ...node.data,
+      onStartEdit,
+      onCommitLabel,
+    },
+  }));
+}
+
+function buildNodeFromTemplate(template: EditorNodeType, id: string, position: { x: number; y: number }): Node<NodeData> {
+  const kind = templateToKind(template);
+  if (kind === "container") {
+    return {
+      id,
+      type: "containerNode",
+      data: { label: id, kind },
+      position,
+      style: { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT },
+      draggable: true,
+      selectable: true,
+    };
+  }
+
+  return {
+    id,
+    type: toFlowNodeType(kind),
+    data: { label: id, kind },
+    position,
+    draggable: true,
+    selectable: true,
+  };
+}
+
+function isAllowedHierarchyEdge(source: Node<NodeData> | undefined, target: Node<NodeData> | undefined): boolean {
+  if (!source || !target) return false;
+  const sourceCategory = toCanonicalCategory(source.data.kind);
+  const targetCategory = toCanonicalCategory(target.data.kind);
+  if (sourceCategory === "ui" && targetCategory === "service") return true;
+  if (sourceCategory === "service" && (targetCategory === "database" || targetCategory === "cache")) return true;
+  return false;
+}
+
+function createEdge(
+  id: string,
+  source: string,
+  target: string,
+  edgeType: EdgeProtocol,
+  lineStyle: EdgeLine
+): Edge<EdgeData> {
+  const visual = getProtocolVisual(edgeType, lineStyle);
+  return {
+    id,
+    source,
+    target,
+    type: "smoothstep",
+    markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+    data: { edgeType, lineStyle },
+    label: edgeType,
+    style: visual.style,
+    labelStyle: visual.labelStyle,
+    labelBgStyle: visual.labelBgStyle,
+    labelBgBorderRadius: 4,
+    labelBgPadding: [4, 3],
+    animated: false,
+  };
+}
+
+function dedupeEdges(edges: Edge<EdgeData>[]): Edge<EdgeData>[] {
+  const seen = new Set<string>();
+  const out: Edge<EdgeData>[] = [];
+  edges.forEach((edge) => {
+    const key = `${edge.source}->${edge.target}`;
+    if (edge.source === edge.target || seen.has(key)) return;
+    seen.add(key);
+    const edgeType = edge.data?.edgeType ?? "request";
+    const lineStyle = edge.data?.lineStyle ?? (edgeType === "Queue" ? "async" : "sync");
+    out.push(createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle));
+  });
+  return out;
 }
 
 function buildNodesFromArchitecture(architecture: Architecture): Node<NodeData>[] {
@@ -288,6 +353,7 @@ function buildNodesFromArchitecture(architecture: Architecture): Node<NodeData>[
       position: { x: 0, y: layerY[layer] },
       draggable: true,
       selectable: true,
+      style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : undefined,
     });
   });
 
@@ -304,119 +370,72 @@ function buildNodesFromArchitecture(architecture: Architecture): Node<NodeData>[
   return output;
 }
 
-function isAllowedHierarchyEdge(source: Node<NodeData> | undefined, target: Node<NodeData> | undefined): boolean {
-  if (!source || !target) return false;
-
-  const sourceCategory = toCanonicalCategory(source.data.kind);
-  const targetCategory = toCanonicalCategory(target.data.kind);
-  if (sourceCategory === "ui" && targetCategory === "service") return true;
-  if (sourceCategory === "service" && (targetCategory === "database" || targetCategory === "cache")) return true;
-  return false;
-}
-
-function dedupeEdges(edges: Edge[]): Edge[] {
-  const seen = new Set<string>();
-  const output: Edge[] = [];
-
-  edges.forEach((edge) => {
-    const key = `${edge.source}->${edge.target}`;
-    if (edge.source === edge.target || seen.has(key)) return;
-    seen.add(key);
-    output.push({
-      ...edge,
-      type: "smoothstep",
-      style: edgeStyle(),
-      markerEnd: { type: MarkerType.ArrowClosed },
-      animated: false,
-    });
-  });
-
-  return output;
-}
-
-function buildEdgesFromHierarchy(nodes: Node<NodeData>[]): Edge[] {
+function buildHierarchyEdges(nodes: Node<NodeData>[]): Edge<EdgeData>[] {
   const ui = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "ui");
   const services = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "service");
   const databases = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "database");
   const caches = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "cache");
 
-  const edges: Edge[] = [];
+  const edges: Edge<EdgeData>[] = [];
   let id = 1;
 
   ui.forEach((src) => {
-    services.forEach((dst) => {
-      edges.push({ id: `e${id++}`, source: src.id, target: dst.id, type: "smoothstep", style: edgeStyle(), markerEnd: { type: MarkerType.ArrowClosed } });
-    });
+    services.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "HTTP", "sync")));
   });
-
   services.forEach((src) => {
-    databases.forEach((dst) => {
-      edges.push({ id: `e${id++}`, source: src.id, target: dst.id, type: "smoothstep", style: edgeStyle(), markerEnd: { type: MarkerType.ArrowClosed } });
-    });
+    databases.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "DB Query", "sync")));
   });
-
   services.forEach((src) => {
-    caches.forEach((dst) => {
-      edges.push({ id: `e${id++}`, source: src.id, target: dst.id, type: "smoothstep", style: edgeStyle(), markerEnd: { type: MarkerType.ArrowClosed } });
-    });
+    caches.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "Queue", "async")));
   });
 
   return dedupeEdges(edges);
 }
 
-function buildEdgesFromArchitecture(nodes: Node<NodeData>[], architecture: Architecture): Edge[] {
+function buildEdgesFromArchitecture(nodes: Node<NodeData>[], architecture: Architecture): Edge<EdgeData>[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
-  const candidateEdges: Edge[] = architecture.edges
+  const candidate = architecture.edges
     .filter((edge) => typeof edge.source === "string" && typeof edge.target === "string")
-    .map((edge, index) => ({
-      id: `e${index + 1}`,
-      source: edge.source,
-      target: edge.target,
-      type: "smoothstep",
-      style: edgeStyle(),
-      markerEnd: { type: MarkerType.ArrowClosed },
-      animated: false,
-    }))
-    .filter((edge) => isAllowedHierarchyEdge(byId.get(edge.source), byId.get(edge.target)));
+    .map((edge, index) => {
+      const sourceNode = byId.get(edge.source);
+      const targetNode = byId.get(edge.target);
+      if (!isAllowedHierarchyEdge(sourceNode, targetNode)) return null;
+      const edgeType = protocolFromKinds(sourceNode, targetNode);
+      return createEdge(`e${index + 1}`, edge.source, edge.target, edgeType, edgeType === "Queue" ? "async" : "sync");
+    })
+    .filter((edge): edge is Edge<EdgeData> => edge !== null);
 
-  const deduped = dedupeEdges(candidateEdges);
-  if (deduped.length > 0) return deduped;
-  return buildEdgesFromHierarchy(nodes);
+  if (candidate.length > 0) return dedupeEdges(candidate);
+  return buildHierarchyEdges(nodes);
 }
 
-async function applyDagreLayout(nodes: Node<NodeData>[], edges: Edge[]): Promise<Node<NodeData>[]> {
+async function applyDagreLayout(nodes: Node<NodeData>[], edges: Edge<EdgeData>[]): Promise<Node<NodeData>[]> {
   try {
     const dagreModule = await import(/* @vite-ignore */ "https://esm.sh/dagre@0.8.5");
-    const dagreLib = (dagreModule as { default?: unknown; graphlib?: unknown; layout?: unknown }).default as
-      | { graphlib: { Graph: new () => { setGraph: (g: object) => void; setDefaultEdgeLabel: (f: () => object) => void; setNode: (id: string, v: object) => void; setEdge: (s: string, t: string) => void; node: (id: string) => { x: number; y: number } } }; layout: (g: unknown) => void }
-      | undefined;
+    const dagre = dagreModule.default as {
+      graphlib: { Graph: new () => { setGraph: (g: object) => void; setDefaultEdgeLabel: (fn: () => object) => void; setNode: (id: string, data: object) => void; setEdge: (s: string, t: string) => void; node: (id: string) => { x: number; y: number } } };
+      layout: (g: unknown) => void;
+    };
 
-    if (!dagreLib?.graphlib?.Graph || !dagreLib.layout) {
-      return nodes;
-    }
-
-    const g = new dagreLib.graphlib.Graph();
-    g.setGraph({ rankdir: "TB", ranksep: 90, nodesep: 50, marginx: 20, marginy: 20 });
-    g.setDefaultEdgeLabel(() => ({}));
+    const graph = new dagre.graphlib.Graph();
+    graph.setGraph({ rankdir: "TB", ranksep: 90, nodesep: 55, marginx: 20, marginy: 20 });
+    graph.setDefaultEdgeLabel(() => ({}));
 
     nodes.forEach((node) => {
-      g.setNode(node.id, { width: 150, height: 42 });
+      const size = getNodeSize(node);
+      graph.setNode(node.id, { width: size.width, height: size.height });
     });
-    edges.forEach((edge) => {
-      g.setEdge(edge.source, edge.target);
-    });
-
-    dagreLib.layout(g);
+    edges.forEach((edge) => graph.setEdge(edge.source, edge.target));
+    dagre.layout(graph);
 
     return nodes.map((node) => {
-      const positioned = g.node(node.id);
+      if (node.parentNode) return node;
+      const placed = graph.node(node.id);
+      const size = getNodeSize(node);
       return {
         ...node,
-        position: {
-          x: positioned.x - 75,
-          y: positioned.y - 21,
-        },
+        position: { x: placed.x - size.width / 2, y: placed.y - size.height / 2 },
       };
     });
   } catch {
@@ -430,139 +449,257 @@ function buildInitialGraph(architecture: Architecture): GraphState {
   return { nodes, edges };
 }
 
-function editorCommandToKind(nodeType: EditorNodeType | undefined): FlowNodeKind {
-  if (nodeType === "ui") return "ui";
-  if (nodeType === "cache") return "cache";
-  if (nodeType === "queue") return "queue";
-  if (nodeType === "data") return "database";
-  return "service";
-}
-
 function cloneGraphState(state: GraphState): GraphState {
   return {
     nodes: state.nodes.map((node) => ({
       ...node,
       data: { ...node.data },
       position: { ...node.position },
+      style: node.style ? { ...node.style } : undefined,
     })),
     edges: state.edges.map((edge) => ({
       ...edge,
-      markerEnd: edge.markerEnd,
+      data: edge.data ? { ...edge.data } : undefined,
       style: edge.style ? { ...edge.style } : undefined,
+      labelStyle: edge.labelStyle ? { ...edge.labelStyle } : undefined,
+      labelBgStyle: edge.labelBgStyle ? { ...edge.labelBgStyle } : undefined,
+      markerEnd: edge.markerEnd,
     })),
   };
 }
 
-function DiagramViewInner({ architecture, command }: DiagramViewProps) {
-  const initialGraph = useMemo(() => buildInitialGraph(architecture), [architecture]);
+function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
+  const [draft, setDraft] = useState(data.label);
+  useEffect(() => setDraft(data.label), [data.label]);
 
+  const iconUrl = getIconUrl(data.label);
+  const commit = () => {
+    data.onCommitLabel?.(id, draft);
+  };
+
+  return (
+    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
+      <Handle type="target" position={Position.Top} />
+      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <span className="arch-node-fallback" />}
+      {data.editing ? (
+        <input
+          className="arch-node-input nodrag nowheel"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+            if (event.key === "Enter") {
+              commit();
+            }
+          }}
+          autoFocus
+        />
+      ) : (
+        <div className="arch-node-label">{data.label}</div>
+      )}
+      <Handle type="source" position={Position.Bottom} />
+    </div>
+  );
+}
+
+function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
+  const [draft, setDraft] = useState(data.label);
+  useEffect(() => setDraft(data.label), [data.label]);
+  const iconUrl = getIconUrl(data.label);
+
+  const commit = () => data.onCommitLabel?.(id, draft);
+
+  return (
+    <div className={`arch-container ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
+      <div className="arch-container-header">
+        {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <span className="arch-node-fallback" />}
+        {data.editing ? (
+          <input
+            className="arch-node-input nodrag nowheel"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
+              if (event.key === "Enter") commit();
+            }}
+            autoFocus
+          />
+        ) : (
+          <span className="arch-container-title">{data.label}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const nodeTypes = {
+  uiNode: NodeShell,
+  serviceNode: NodeShell,
+  dataNode: NodeShell,
+  cacheNode: NodeShell,
+  queueNode: NodeShell,
+  containerNode: ContainerNode,
+};
+
+function DiagramViewInner({ architecture, command }: DiagramViewProps) {
+  const reactFlow = useReactFlow<NodeData, EdgeData>();
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const initialGraph = useMemo(() => buildInitialGraph(architecture), [architecture]);
   const [graph, setGraph] = useState<GraphState>(initialGraph);
-  const nodeCounterRef = useRef<number>(1);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const historyRef = useRef<GraphState[]>([]);
   const futureRef = useRef<GraphState[]>([]);
-  const restoringRef = useRef(false);
-  const graphRef = useRef<GraphState>(graph);
-  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const graphRef = useRef(graph);
+  const nodeCounterRef = useRef(1);
 
   useEffect(() => {
     graphRef.current = graph;
   }, [graph]);
 
-  const applyGraphChange = useCallback((updater: (current: GraphState) => GraphState) => {
+  const onStartEdit = useCallback((nodeId: string) => {
+    setEditingNodeId(nodeId);
+  }, []);
+
+  const onCommitLabel = useCallback((nodeId: string, label: string) => {
+    const clean = label.trim() || nodeId;
+    setEditingNodeId(null);
     setGraph((current) => {
-      if (!restoringRef.current) {
+      historyRef.current.push(cloneGraphState(current));
+      if (historyRef.current.length > 50) historyRef.current.shift();
+      futureRef.current = [];
+
+      return {
+        ...current,
+        nodes: current.nodes.map((node) => {
+          if (node.id !== nodeId) return node;
+          const kind = detectKindFromLabel(clean, node.type);
+          return {
+            ...node,
+            type: toFlowNodeType(kind),
+            data: {
+              ...node.data,
+              label: clean,
+              kind,
+              editing: false,
+              onStartEdit,
+              onCommitLabel,
+            },
+            style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : node.style,
+          };
+        }),
+      };
+    });
+  }, [onStartEdit]);
+
+  const withCallbacks = useCallback(
+    (state: GraphState): GraphState => ({
+      nodes: attachNodeCallbacks(
+        state.nodes.map((node) => ({
+          ...node,
+          data: { ...node.data, editing: node.id === editingNodeId },
+        })),
+        onStartEdit,
+        onCommitLabel
+      ),
+      edges: state.edges,
+    }),
+    [editingNodeId, onCommitLabel, onStartEdit]
+  );
+
+  const applyGraphChange = useCallback(
+    (updater: (current: GraphState) => GraphState) => {
+      setGraph((current) => {
         historyRef.current.push(cloneGraphState(current));
-        if (historyRef.current.length > 50) {
-          historyRef.current.shift();
-        }
+        if (historyRef.current.length > 50) historyRef.current.shift();
         futureRef.current = [];
-      }
-      return updater(current);
-    });
-  }, []);
-
-  const replaceGraph = useCallback((next: GraphState) => {
-    applyGraphChange(() => cloneGraphState(next));
-  }, [applyGraphChange]);
-
-  const applyAutoLayout = useCallback(async (state: GraphState) => {
-    const laidOutNodes = await applyDagreLayout(state.nodes, state.edges);
-    setGraph((current) => {
-      if (current !== state) return current;
-      return { ...current, nodes: laidOutNodes };
-    });
-  }, []);
-
-  useEffect(() => {
-    restoringRef.current = true;
-    setGraph(initialGraph);
-    historyRef.current = [];
-    futureRef.current = [];
-    nodeCounterRef.current = 1;
-    restoringRef.current = false;
-    void applyAutoLayout(initialGraph);
-  }, [initialGraph, applyAutoLayout]);
+        return updater(current);
+      });
+    },
+    []
+  );
 
   const undo = useCallback(() => {
-    const previous = historyRef.current.pop();
-    if (!previous) return;
-
+    const prev = historyRef.current.pop();
+    if (!prev) return;
     futureRef.current.push(cloneGraphState(graphRef.current));
-    restoringRef.current = true;
-    setGraph(cloneGraphState(previous));
-    restoringRef.current = false;
+    setGraph(prev);
+    setEditingNodeId(null);
   }, []);
 
   const redo = useCallback(() => {
     const next = futureRef.current.pop();
     if (!next) return;
-
     historyRef.current.push(cloneGraphState(graphRef.current));
-    restoringRef.current = true;
-    setGraph(cloneGraphState(next));
-    restoringRef.current = false;
+    setGraph(next);
+    setEditingNodeId(null);
   }, []);
+
+  const applyAutoLayout = useCallback(async (state: GraphState) => {
+    const laidOut = await applyDagreLayout(state.nodes, state.edges);
+    setGraph((current) => {
+      if (current !== state) return current;
+      return { ...current, nodes: laidOut };
+    });
+  }, []);
+
+  useEffect(() => {
+    historyRef.current = [];
+    futureRef.current = [];
+    nodeCounterRef.current = 1;
+    setGraph(initialGraph);
+    setEditingNodeId(null);
+    void applyAutoLayout(initialGraph);
+  }, [initialGraph, applyAutoLayout]);
+
+  useEffect(() => {
+    if (!command) return;
+    if (command.action === "clear") {
+      applyGraphChange(() => ({ nodes: [], edges: [] }));
+      return;
+    }
+    if (command.action === "reset") {
+      const next = buildInitialGraph(architecture);
+      applyGraphChange(() => next);
+      void applyAutoLayout(next);
+    }
+  }, [architecture, command, applyAutoLayout, applyGraphChange]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      const tagName = target?.tagName?.toLowerCase();
-      const isEditingText = !!target && (target.isContentEditable || tagName === "input" || tagName === "textarea");
-      if (isEditingText) return;
+      const tag = target?.tagName?.toLowerCase();
+      const editingText = !!target && (target.isContentEditable || tag === "input" || tag === "textarea");
+      if (editingText) return;
 
       const key = event.key.toLowerCase();
-      const ctrlOrMeta = event.ctrlKey || event.metaKey;
+      const ctrlMeta = event.ctrlKey || event.metaKey;
 
-      if (!ctrlOrMeta) return;
-
-      if (key === "z" && !event.shiftKey) {
+      if (ctrlMeta && key === "z" && !event.shiftKey) {
         event.preventDefault();
         undo();
         return;
       }
-
-      if ((key === "z" && event.shiftKey) || key === "y") {
+      if (ctrlMeta && (key === "y" || (key === "z" && event.shiftKey))) {
         event.preventDefault();
         redo();
         return;
       }
-
-      if (key === "backspace" || key === "delete") {
+      if (key === "delete" || key === "backspace") {
         event.preventDefault();
         applyGraphChange((current) => {
-          const selectedNodeIds = new Set(current.nodes.filter((node) => node.selected).map((node) => node.id));
-          const remainingNodes = current.nodes.filter((node) => !selectedNodeIds.has(node.id));
-          const remainingEdges = current.edges.filter(
-            (edge) => !edge.selected && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target)
-          );
-          return { nodes: remainingNodes, edges: remainingEdges };
+          const selectedNodeIds = new Set(current.nodes.filter((n) => n.selected).map((n) => n.id));
+          const nodes = current.nodes.filter((n) => !selectedNodeIds.has(n.id));
+          const edges = current.edges.filter((e) => !e.selected && !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target));
+          return { nodes, edges };
         });
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [redo, undo]);
+  }, [applyGraphChange, redo, undo]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -584,61 +721,103 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
     [applyGraphChange]
   );
 
-  useEffect(() => {
-    if (!command) return;
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      applyGraphChange((current) => {
+        if (!connection.source || !connection.target) return current;
+        const sourceNode = current.nodes.find((n) => n.id === connection.source);
+        const targetNode = current.nodes.find((n) => n.id === connection.target);
+        if (!isAllowedHierarchyEdge(sourceNode, targetNode)) return current;
 
-    if (command.action === "add" && command.nodeType) {
-      const index = nodeCounterRef.current;
-      nodeCounterRef.current += 1;
-      const nodeKind = editorCommandToKind(command.nodeType);
+        const exists = current.edges.some((e) => e.source === connection.source && e.target === connection.target);
+        if (exists) return current;
 
-      const newNode: Node<NodeData> = {
-        id: `${nodeKind}-${index}`,
-        type: toFlowNodeType(nodeKind),
-        data: { label: `${nodeKind}-${index}`, kind: nodeKind },
-        position: { x: 90 + index * 18, y: layerY[toLayer(nodeKind)] },
-        draggable: true,
-      };
-      applyGraphChange((current) => ({ ...current, nodes: [...current.nodes, newNode] }));
-      return;
-    }
+        const suggested = protocolFromKinds(sourceNode, targetNode);
+        const chosen = normalizeProtocol(window.prompt("Edge type: HTTP, gRPC, Queue, DB Query, request", suggested));
+        const lineStyle: EdgeLine = chosen === "Queue" ? "async" : "sync";
 
-    if (command.action === "reset") {
-      const next = buildInitialGraph(architecture);
-      replaceGraph(next);
-      void applyAutoLayout(next);
-      return;
-    }
+        const edge = createEdge(`e${Date.now()}`, connection.source, connection.target, chosen, lineStyle);
+        return { ...current, edges: [...current.edges, edge] };
+      });
+    },
+    [applyGraphChange]
+  );
 
-    if (command.action === "clear") {
-      applyGraphChange(() => ({ nodes: [], edges: [] }));
-    }
-  }, [architecture, command, applyAutoLayout, applyGraphChange, replaceGraph]);
+  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
 
-  const onConnect = (connection: Connection) => {
-    applyGraphChange((current) => {
-      if (!connection.source || !connection.target) return current;
+  const onDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      const raw = event.dataTransfer.getData("application/x-arch-node") as EditorNodeType;
+      if (!raw) return;
 
-      const sourceNode = current.nodes.find((node) => node.id === connection.source);
-      const targetNode = current.nodes.find((node) => node.id === connection.target);
-      if (!isAllowedHierarchyEdge(sourceNode, targetNode)) return current;
+      const position = reactFlow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const id = `${raw}-${Date.now()}`;
+      const node = buildNodeFromTemplate(raw, id, position);
 
-      const duplicate = current.edges.some((edge) => edge.source === connection.source && edge.target === connection.target);
-      if (duplicate) return current;
+      applyGraphChange((current) => {
+        const container = raw !== "container" ? findContainerAtPoint(current.nodes, position) : undefined;
+        if (container) {
+          const byId = new Map(current.nodes.map((n) => [n.id, n]));
+          const containerAbs = getAbsolutePosition(container, byId);
+          node.parentNode = container.id;
+          node.extent = "parent";
+          node.position = { x: position.x - containerAbs.x - 20, y: position.y - containerAbs.y - 28 };
+        }
+        return { ...current, nodes: [...current.nodes, node] };
+      });
+    },
+    [applyGraphChange, reactFlow]
+  );
 
-      const created: Edge = {
-        id: `e${Date.now()}`,
-        source: connection.source,
-        target: connection.target,
-        type: "smoothstep",
-        style: edgeStyle(),
-        markerEnd: { type: MarkerType.ArrowClosed },
-        animated: false,
-      };
+  const onNodeDragStop = useCallback(
+    (_: React.MouseEvent, draggedNode: Node<NodeData>) => {
+      if (draggedNode.type === "containerNode") return;
 
-      return { ...current, edges: [...current.edges, created] };
-    });
-  };
+      applyGraphChange((current) => {
+        const byId = new Map(current.nodes.map((n) => [n.id, n]));
+        const currentNode = byId.get(draggedNode.id);
+        if (!currentNode) return current;
+
+        const abs = (draggedNode.positionAbsolute ?? draggedNode.position) as { x: number; y: number };
+        const container = findContainerAtPoint(current.nodes, abs, draggedNode.id);
+
+        const updatedNodes = current.nodes.map((node) => {
+          if (node.id !== draggedNode.id) return node;
+
+          if (container) {
+            const containerAbs = getAbsolutePosition(container, byId);
+            return {
+              ...node,
+              parentNode: container.id,
+              extent: "parent",
+              position: {
+                x: abs.x - containerAbs.x,
+                y: abs.y - containerAbs.y,
+              },
+            };
+          }
+
+          if (node.parentNode) {
+            return {
+              ...node,
+              parentNode: undefined,
+              extent: undefined,
+              position: abs,
+            };
+          }
+
+          return node;
+        });
+
+        return { ...current, nodes: updatedNodes };
+      });
+    },
+    [applyGraphChange]
+  );
 
   const onExportJson = () => {
     const payload = JSON.stringify({ nodes: graph.nodes, edges: graph.edges }, null, 2);
@@ -653,120 +832,228 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
     URL.revokeObjectURL(url);
   };
 
-  const onImportJson = () => {
-    importInputRef.current?.click();
-  };
-
-  const onImportFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const onImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     try {
       const text = await file.text();
       const parsed = JSON.parse(text) as { nodes?: unknown; edges?: unknown };
-
       if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) return;
 
-      const importedNodes: Node<NodeData>[] = parsed.nodes
-        .map((node, index) => {
-          if (!node || typeof node !== "object") return null;
-          const candidate = node as { id?: unknown; data?: { label?: unknown; kind?: unknown }; type?: unknown; position?: { x?: unknown; y?: unknown } };
-          if (typeof candidate.id !== "string") return null;
-
-          const label = typeof candidate.data?.label === "string" ? candidate.data.label : candidate.id;
-          const kind = detectKindFromLabel(label, typeof candidate.type === "string" ? candidate.type : undefined);
-          const x = typeof candidate.position?.x === "number" ? candidate.position.x : index * 50;
-          const y = typeof candidate.position?.y === "number" ? candidate.position.y : layerY[toLayer(kind)];
-
-          return {
-            id: candidate.id,
-            type: toFlowNodeType(kind),
-            data: { label, kind },
-            position: { x, y },
-            draggable: true,
-            selectable: true,
-          } as Node<NodeData>;
+      const nodes = parsed.nodes
+        .map((item, index) => {
+          if (!item || typeof item !== "object") return null;
+          const node = item as { id?: unknown; type?: unknown; data?: { label?: unknown }; position?: { x?: unknown; y?: unknown } };
+          if (typeof node.id !== "string") return null;
+          const label = typeof node.data?.label === "string" ? node.data.label : node.id;
+          const kind = detectKindFromLabel(label, typeof node.type === "string" ? node.type : undefined);
+          const built = buildNodeFromTemplate(kind === "database" ? "data" : (kind as EditorNodeType), node.id, {
+            x: typeof node.position?.x === "number" ? node.position.x : index * 40,
+            y: typeof node.position?.y === "number" ? node.position.y : layerY[toLayer(kind)],
+          });
+          built.data = { ...built.data, label, kind };
+          return built;
         })
-        .filter((node): node is Node<NodeData> => node !== null);
+        .filter((n): n is Node<NodeData> => n !== null);
 
-      const nodeIdSet = new Set(importedNodes.map((node) => node.id));
-
-      const importedEdges: Edge[] = dedupeEdges(
+      const nodeSet = new Set(nodes.map((n) => n.id));
+      const edges = dedupeEdges(
         parsed.edges
-          .map((edge, index) => {
-            if (!edge || typeof edge !== "object") return null;
-            const candidate = edge as { source?: unknown; target?: unknown };
-            if (typeof candidate.source !== "string" || typeof candidate.target !== "string") return null;
-            if (!nodeIdSet.has(candidate.source) || !nodeIdSet.has(candidate.target)) return null;
-
-            return {
-              id: `i${index + 1}`,
-              source: candidate.source,
-              target: candidate.target,
-              type: "smoothstep",
-              style: edgeStyle(),
-              markerEnd: { type: MarkerType.ArrowClosed },
-            } as Edge;
+          .map((item, index) => {
+            if (!item || typeof item !== "object") return null;
+            const edge = item as { source?: unknown; target?: unknown; data?: { edgeType?: unknown; lineStyle?: unknown } };
+            if (typeof edge.source !== "string" || typeof edge.target !== "string") return null;
+            if (!nodeSet.has(edge.source) || !nodeSet.has(edge.target)) return null;
+            const edgeType = normalizeProtocol(typeof edge.data?.edgeType === "string" ? edge.data.edgeType : "request");
+            const lineStyle: EdgeLine = edgeType === "Queue" ? "async" : "sync";
+            return createEdge(`i${index + 1}`, edge.source, edge.target, edgeType, lineStyle);
           })
-          .filter((edge): edge is Edge => edge !== null)
+          .filter((e): e is Edge<EdgeData> => e !== null)
       );
 
-      const nextState: GraphState = {
-        nodes: importedNodes,
-        edges: importedEdges.length > 0 ? importedEdges : buildEdgesFromHierarchy(importedNodes),
-      };
-
-      replaceGraph(nextState);
-      void applyAutoLayout(nextState);
+      const next = { nodes, edges: edges.length > 0 ? edges : buildHierarchyEdges(nodes) };
+      applyGraphChange(() => next);
+      void applyAutoLayout(next);
     } catch {
-      // Intentionally ignore malformed imports to keep editor responsive.
+      // Ignore malformed imports.
     } finally {
       event.target.value = "";
     }
   };
 
-  return (
-    <div className="diagram-canvas">
-      <div className="diagram-menubar">
-        <div className="menu-group">
-          <span className="menu-title">File</span>
-          <button type="button" className="menu-btn" onClick={onExportJson}>Export JSON</button>
-          <button type="button" className="menu-btn" onClick={onImportJson}>Import JSON</button>
-          <button type="button" className="menu-btn danger" onClick={() => applyGraphChange(() => ({ nodes: [], edges: [] }))}>Clear Diagram</button>
-        </div>
-        <div className="menu-group">
-          <span className="menu-title">Edit</span>
-          <button type="button" className="menu-btn" onClick={undo}>Undo</button>
-          <button type="button" className="menu-btn" onClick={redo}>Redo</button>
-        </div>
-      </div>
-      <input ref={importInputRef} type="file" accept="application/json" className="hidden-input" onChange={onImportFileChange} />
+  const selectedNode = graph.nodes.find((node) => node.selected);
+  const selectedEdge = graph.edges.find((edge) => edge.selected);
 
-      <ReactFlow
-        nodes={graph.nodes}
-        edges={graph.edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
-        nodeTypes={nodeTypes}
-        fitView
-        nodesDraggable
-        panOnDrag
-        zoomOnScroll
-        zoomOnPinch
-        zoomOnDoubleClick
-        elementsSelectable
-        deleteKeyCode={null}
-        connectionLineType={ConnectionLineType.SmoothStep}
-        snapToGrid
-        snapGrid={[24, 24]}
-        minZoom={0.35}
-        maxZoom={1.7}
-        fitViewOptions={{ padding: 0.2 }}
-      >
-        <Background color="#d1d5db" gap={24} />
-        <Controls showInteractive />
-      </ReactFlow>
+  const updateSelectedNodeLabel = (label: string) => {
+    if (!selectedNode) return;
+    onCommitLabel(selectedNode.id, label);
+  };
+
+  const updateSelectedNodeKind = (kind: FlowNodeKind) => {
+    if (!selectedNode) return;
+    applyGraphChange((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => {
+        if (node.id !== selectedNode.id) return node;
+        return {
+          ...node,
+          type: toFlowNodeType(kind),
+          data: {
+            ...node.data,
+            kind,
+            label: node.data.label,
+          },
+          style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : undefined,
+        };
+      }),
+    }));
+  };
+
+  const deleteSelectedNode = () => {
+    if (!selectedNode) return;
+    applyGraphChange((current) => {
+      const nodes = current.nodes.filter((node) => node.id !== selectedNode.id);
+      const edges = current.edges.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id);
+      return { nodes, edges };
+    });
+  };
+
+  const updateSelectedEdge = (edgeType: EdgeProtocol, lineStyle: EdgeLine) => {
+    if (!selectedEdge) return;
+    applyGraphChange((current) => ({
+      ...current,
+      edges: current.edges.map((edge) => {
+        if (edge.id !== selectedEdge.id) return edge;
+        return createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle);
+      }),
+    }));
+  };
+
+  const deleteSelectedEdge = () => {
+    if (!selectedEdge) return;
+    applyGraphChange((current) => ({
+      ...current,
+      edges: current.edges.filter((edge) => edge.id !== selectedEdge.id),
+    }));
+  };
+
+  const rendered = withCallbacks(graph);
+
+  return (
+    <div className="diagram-editor">
+      <div className="diagram-workspace" ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
+        <div className="diagram-menubar">
+          <div className="menu-group">
+            <span className="menu-title">File</span>
+            <button type="button" className="menu-btn" onClick={onExportJson}>Export JSON</button>
+            <button type="button" className="menu-btn" onClick={() => importInputRef.current?.click()}>Import JSON</button>
+            <button type="button" className="menu-btn danger" onClick={() => applyGraphChange(() => ({ nodes: [], edges: [] }))}>Clear Diagram</button>
+          </div>
+          <div className="menu-group">
+            <span className="menu-title">Edit</span>
+            <button type="button" className="menu-btn" onClick={undo}>Undo</button>
+            <button type="button" className="menu-btn" onClick={redo}>Redo</button>
+          </div>
+        </div>
+
+        <input ref={importInputRef} type="file" accept="application/json" className="hidden-input" onChange={onImportFileChange} />
+
+        <ReactFlow
+          nodes={rendered.nodes}
+          edges={rendered.edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeDragStop={onNodeDragStop}
+          nodeTypes={nodeTypes}
+          fitView
+          nodesDraggable
+          panOnDrag
+          zoomOnScroll
+          zoomOnPinch
+          zoomOnDoubleClick
+          elementsSelectable
+          deleteKeyCode={null}
+          connectionLineType={ConnectionLineType.SmoothStep}
+          snapToGrid
+          snapGrid={[24, 24]}
+          minZoom={0.35}
+          maxZoom={1.7}
+          fitViewOptions={{ padding: 0.2 }}
+        >
+          <Background color="#d1d5db" gap={24} />
+          <Controls showInteractive />
+        </ReactFlow>
+      </div>
+
+      <aside className="property-panel">
+        <h3>Properties</h3>
+
+        {selectedNode ? (
+          <div className="prop-block">
+            <h4>Node</h4>
+            <label>Label</label>
+            <input
+              value={selectedNode.data.label}
+              onChange={(event) => updateSelectedNodeLabel(event.target.value)}
+              className="prop-input"
+            />
+            <label>Type</label>
+            <select
+              className="prop-input"
+              value={selectedNode.data.kind}
+              onChange={(event) => updateSelectedNodeKind(event.target.value as FlowNodeKind)}
+            >
+              <option value="ui">ui</option>
+              <option value="service">service</option>
+              <option value="database">database</option>
+              <option value="cache">cache</option>
+              <option value="queue">queue</option>
+              <option value="gateway">gateway</option>
+              <option value="container">container</option>
+            </select>
+            <label>Icon</label>
+            <div className="prop-icon-row">
+              {getIconUrl(selectedNode.data.label) ? (
+                <img src={getIconUrl(selectedNode.data.label) ?? ""} width={18} height={18} className="arch-node-logo" alt="icon" />
+              ) : (
+                <span className="prop-fallback">Fallback</span>
+              )}
+            </div>
+            <button type="button" className="prop-delete" onClick={deleteSelectedNode}>Delete Node</button>
+          </div>
+        ) : null}
+
+        {selectedEdge ? (
+          <div className="prop-block">
+            <h4>Edge</h4>
+            <label>Type</label>
+            <select
+              className="prop-input"
+              value={selectedEdge.data?.edgeType ?? "request"}
+              onChange={(event) => updateSelectedEdge(normalizeProtocol(event.target.value), selectedEdge.data?.lineStyle ?? "sync")}
+            >
+              <option value="request">request</option>
+              <option value="HTTP">HTTP</option>
+              <option value="gRPC">gRPC</option>
+              <option value="Queue">Queue</option>
+              <option value="DB Query">DB Query</option>
+            </select>
+            <label>Line Style</label>
+            <select
+              className="prop-input"
+              value={selectedEdge.data?.lineStyle ?? "sync"}
+              onChange={(event) => updateSelectedEdge(selectedEdge.data?.edgeType ?? "request", event.target.value as EdgeLine)}
+            >
+              <option value="sync">solid</option>
+              <option value="async">dashed</option>
+            </select>
+            <button type="button" className="prop-delete" onClick={deleteSelectedEdge}>Delete Edge</button>
+          </div>
+        ) : null}
+
+        {!selectedNode && !selectedEdge ? <p className="prop-empty">Select a node or edge to edit properties.</p> : null}
+      </aside>
     </div>
   );
 }
