@@ -55,7 +55,12 @@ def _clean_structured_output(text: str, architecture: dict, max_words: int = 150
 
     if not components_clean:
         nodes = architecture.get("nodes", []) if isinstance(architecture, dict) else []
-        labels = [n.get("label", str(n)) if isinstance(n, dict) else str(n) for n in nodes]
+        labels = [
+            n.get("id") or n.get("label") or str(n)
+            if isinstance(n, dict)
+            else str(n)
+            for n in nodes
+        ]
         labels = [lbl for lbl in labels if lbl]
         components_clean = (
             f"Main components are {', '.join(labels)}."

@@ -2,46 +2,75 @@ import { ChangeEvent, useState } from "react";
 import DiagramView from "./components/DiagramView";
 
 const defaultJson = {
-  nodes: ["frontend", "backend", "database"],
+  nodes: [
+    { id: "frontend", type: "ui" },
+    { id: "backend", type: "service" },
+    { id: "database", type: "data" },
+  ],
+  edges: [
+    { source: "frontend", target: "backend" },
+    { source: "backend", target: "database" },
+  ],
 };
 
 const defaultText = "3-tier app with frontend, backend, database";
+
+type ArchitectureNode = {
+  id: string;
+  type: "ui" | "service" | "data";
+};
+
+type ArchitectureEdge = {
+  source: string;
+  target: string;
+};
+
+type Architecture = {
+  nodes: ArchitectureNode[];
+  edges: ArchitectureEdge[];
+};
+
+const isNodeType = (value: string): value is ArchitectureNode["type"] =>
+  value === "ui" || value === "service" || value === "data";
+
+const architectureFromJson = (inputJson: unknown): Architecture | null => {
+  if (!inputJson || typeof inputJson !== "object") return null;
+  const value = inputJson as { nodes?: unknown; edges?: unknown };
+  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) return null;
+
+  const nodes = value.nodes
+    .map((node) => {
+      if (!node || typeof node !== "object") return null;
+      const candidate = node as { id?: unknown; type?: unknown };
+      if (typeof candidate.id !== "string" || typeof candidate.type !== "string") return null;
+      if (!isNodeType(candidate.type)) return null;
+      return { id: candidate.id, type: candidate.type };
+    })
+    .filter((node): node is ArchitectureNode => node !== null);
+
+  const nodeIds = new Set(nodes.map((node) => node.id));
+
+  const edges = value.edges
+    .map((edge) => {
+      if (!edge || typeof edge !== "object") return null;
+      const candidate = edge as { source?: unknown; target?: unknown };
+      if (typeof candidate.source !== "string" || typeof candidate.target !== "string") return null;
+      if (!nodeIds.has(candidate.source) || !nodeIds.has(candidate.target)) return null;
+      return { source: candidate.source, target: candidate.target };
+    })
+    .filter((edge): edge is ArchitectureEdge => edge !== null);
+
+  if (nodes.length === 0 || edges.length === 0) return null;
+  return { nodes, edges };
+};
 
 function App() {
   const [mode, setMode] = useState<"text" | "json">("text");
   const [input, setInput] = useState(defaultText);
   const [output, setOutput] = useState("");
-  const [architecture, setArchitecture] = useState<{ nodes: string[] } | null>(null);
+  const [architecture, setArchitecture] = useState<Architecture | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const architectureFromText = (text: string): { nodes: string[] } => {
-    const lowered = text.toLowerCase();
-    const nodes: string[] = [];
-    if (lowered.includes("frontend")) nodes.push("frontend");
-    if (lowered.includes("backend")) nodes.push("backend");
-    if (lowered.includes("database") || lowered.includes(" db ") || lowered.startsWith("db ") || lowered.endsWith(" db")) nodes.push("database");
-    if (nodes.length === 0) return { nodes: ["frontend", "backend", "database"] };
-    return { nodes };
-  };
-
-  const architectureFromJson = (inputJson: unknown): { nodes: string[] } | null => {
-    if (!inputJson || typeof inputJson !== "object") return null;
-    const value = inputJson as { nodes?: unknown[] };
-    if (!Array.isArray(value.nodes)) return null;
-
-    const nodes = value.nodes
-      .map((n) => {
-        if (typeof n === "string") return n;
-        if (n && typeof n === "object" && "label" in n && typeof (n as { label?: unknown }).label === "string") {
-          return (n as { label: string }).label;
-        }
-        return "";
-      })
-      .filter((n) => n.length > 0);
-
-    return nodes.length > 0 ? { nodes } : null;
-  };
 
   const onGenerate = async () => {
     setError("");
@@ -58,7 +87,6 @@ function App() {
         return;
       }
       body = { architecture: parsedInput };
-      setArchitecture(architectureFromJson(parsedInput));
     } else {
       const text = input.trim();
       if (!text) {
@@ -66,7 +94,6 @@ function App() {
         return;
       }
       body = { text };
-      setArchitecture(architectureFromText(text));
     }
 
     setLoading(true);
@@ -89,8 +116,15 @@ function App() {
         throw new Error(backendMessage);
       }
 
-      const data = (await response.json()) as { explanation?: string };
+      const data = (await response.json()) as { explanation?: string; architecture?: unknown };
       setOutput(data.explanation ?? "No explanation returned.");
+
+      const parsedArchitecture = architectureFromJson(data.architecture);
+      if (parsedArchitecture) {
+        setArchitecture(parsedArchitecture);
+      } else {
+        setError("Backend response did not include a valid architecture graph.");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(`Request failed: ${message}`);

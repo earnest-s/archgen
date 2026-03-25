@@ -2,8 +2,19 @@ import { useMemo } from "react";
 import ReactFlow, { Background, Controls, Edge, Node, ReactFlowProvider } from "reactflow";
 import "reactflow/dist/style.css";
 
+type ArchitectureNode = {
+  id: string;
+  type: "ui" | "service" | "data";
+};
+
+type ArchitectureEdge = {
+  source: string;
+  target: string;
+};
+
 type Architecture = {
-  nodes: string[];
+  nodes: ArchitectureNode[];
+  edges: ArchitectureEdge[];
 };
 
 type DiagramViewProps = {
@@ -30,22 +41,11 @@ const layerBorder: Record<LayerType, string> = {
   data: "#fb923c",
 };
 
-function getNodeType(label: string): LayerType {
-  const lowered = label.toLowerCase();
-  if (lowered.includes("front") || lowered.includes("ui") || lowered.includes("client")) {
-    return "ui";
-  }
-  if (lowered.includes("db") || lowered.includes("data") || lowered.includes("database")) {
-    return "data";
-  }
-  return "service";
-}
-
 function DiagramViewInner({ architecture }: DiagramViewProps) {
   const nodes: Node[] = useMemo(() => {
     const groups: Record<LayerType, string[]> = { ui: [], service: [], data: [] };
-    architecture.nodes.forEach((label) => {
-      groups[getNodeType(label)].push(label);
+    architecture.nodes.forEach((node) => {
+      groups[node.type].push(node.id);
     });
 
     const spacing = 220;
@@ -82,28 +82,13 @@ function DiagramViewInner({ architecture }: DiagramViewProps) {
   }, [architecture.nodes]);
 
   const edges: Edge[] = useMemo(() => {
-    const groups: Record<LayerType, string[]> = { ui: [], service: [], data: [] };
-    architecture.nodes.forEach((label) => {
-      groups[getNodeType(label)].push(label);
-    });
-
-    const out: Edge[] = [];
-    let edgeId = 1;
-
-    groups.ui.forEach((uiNode) => {
-      groups.service.forEach((serviceNode) => {
-        out.push({ id: `e${edgeId++}`, source: uiNode, target: serviceNode, animated: false });
-      });
-    });
-
-    groups.service.forEach((serviceNode) => {
-      groups.data.forEach((dataNode) => {
-        out.push({ id: `e${edgeId++}`, source: serviceNode, target: dataNode, animated: false });
-      });
-    });
-
-    return out;
-  }, [architecture.nodes]);
+    return architecture.edges.map((edge, index) => ({
+      id: `e${index + 1}`,
+      source: edge.source,
+      target: edge.target,
+      animated: false,
+    }));
+  }, [architecture.edges]);
 
   return (
     <div className="diagram-canvas">
