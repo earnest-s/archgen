@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import { Database, Globe, Layers, Server, Zap } from "lucide-react";
 import ReactFlow, {
   addEdge,
   Background,
@@ -34,28 +35,27 @@ type Architecture = {
   edges: ArchitectureEdge[];
 };
 
+type EditorNodeType = "ui" | "service" | "data" | "cache" | "queue";
+
+type EditorCommand = {
+  id: number;
+  action: "add" | "reset" | "clear";
+  nodeType?: EditorNodeType;
+};
+
 type DiagramViewProps = {
   architecture: Architecture;
+  command?: EditorCommand | null;
 };
 
-type LayerType = "ui" | "service" | "data";
+type LayerType = EditorNodeType;
 
 const layerY: Record<LayerType, number> = {
-  ui: 0,
-  service: 150,
-  data: 300,
-};
-
-const layerColor: Record<LayerType, string> = {
-  ui: "#dbeafe",
-  service: "#dcfce7",
-  data: "#ffedd5",
-};
-
-const layerBorder: Record<LayerType, string> = {
-  ui: "#60a5fa",
-  service: "#4ade80",
-  data: "#fb923c",
+  ui: 60,
+  service: 220,
+  cache: 300,
+  queue: 370,
+  data: 460,
 };
 
 type NodeData = {
@@ -64,9 +64,9 @@ type NodeData = {
 
 function UiNode({ data }: NodeProps<NodeData>) {
   return (
-    <div className="arch-node arch-node-ui">
+    <div className={`arch-node arch-node-ui ${data.selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <div className="arch-node-icon">🖥️</div>
+      <Globe size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -75,9 +75,9 @@ function UiNode({ data }: NodeProps<NodeData>) {
 
 function ServiceNode({ data }: NodeProps<NodeData>) {
   return (
-    <div className="arch-node arch-node-service">
+    <div className={`arch-node arch-node-service ${data.selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <div className="arch-node-icon">⚙️</div>
+      <Server size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -86,9 +86,31 @@ function ServiceNode({ data }: NodeProps<NodeData>) {
 
 function DataNode({ data }: NodeProps<NodeData>) {
   return (
-    <div className="arch-node arch-node-data">
+    <div className={`arch-node arch-node-data ${data.selected ? "selected" : ""}`}>
       <Handle type="target" position={Position.Top} />
-      <div className="arch-node-icon">🛢️</div>
+      <Database size={14} className="arch-node-icon" />
+      <div className="arch-node-label">{data.label}</div>
+      <Handle type="source" position={Position.Bottom} />
+    </div>
+  );
+}
+
+function CacheNode({ data }: NodeProps<NodeData>) {
+  return (
+    <div className={`arch-node arch-node-cache ${data.selected ? "selected" : ""}`}>
+      <Handle type="target" position={Position.Top} />
+      <Zap size={14} className="arch-node-icon" />
+      <div className="arch-node-label">{data.label}</div>
+      <Handle type="source" position={Position.Bottom} />
+    </div>
+  );
+}
+
+function QueueNode({ data }: NodeProps<NodeData>) {
+  return (
+    <div className={`arch-node arch-node-queue ${data.selected ? "selected" : ""}`}>
+      <Handle type="target" position={Position.Top} />
+      <Layers size={14} className="arch-node-icon" />
       <div className="arch-node-label">{data.label}</div>
       <Handle type="source" position={Position.Bottom} />
     </div>
@@ -99,24 +121,30 @@ const nodeTypes = {
   uiNode: UiNode,
   serviceNode: ServiceNode,
   dataNode: DataNode,
+  cacheNode: CacheNode,
+  queueNode: QueueNode,
 };
 
 function normalizeLayerType(input: string | undefined): LayerType {
   if (!input) return "service";
   const lowered = input.toLowerCase();
   if (lowered === "ui") return "ui";
+  if (lowered === "cache") return "cache";
+  if (lowered === "queue") return "queue";
   if (lowered === "data") return "data";
   return "service";
 }
 
-function toFlowNodeType(layerType: LayerType): "uiNode" | "serviceNode" | "dataNode" {
+function toFlowNodeType(layerType: LayerType): "uiNode" | "serviceNode" | "dataNode" | "cacheNode" | "queueNode" {
   if (layerType === "ui") return "uiNode";
+  if (layerType === "cache") return "cacheNode";
+  if (layerType === "queue") return "queueNode";
   if (layerType === "data") return "dataNode";
   return "serviceNode";
 }
 
 function buildInitialNodes(architecture: Architecture): Node<NodeData>[] {
-  const groups: Record<LayerType, string[]> = { ui: [], service: [], data: [] };
+  const groups: Record<LayerType, string[]> = { ui: [], service: [], data: [], cache: [], queue: [] };
   architecture.nodes.forEach((node) => {
     if (typeof node.id !== "string" || !node.id) return;
     groups[normalizeLayerType(node.type)].push(node.id);
@@ -155,12 +183,13 @@ function buildInitialEdges(architecture: Architecture): Edge[] {
       source: edge.source,
       target: edge.target,
       type: "smoothstep",
+      style: { stroke: "#64748b", strokeWidth: 1.8 },
       markerEnd: { type: MarkerType.ArrowClosed },
       animated: false,
     }));
 }
 
-function DiagramViewInner({ architecture }: DiagramViewProps) {
+function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   const initialNodes = useMemo(() => buildInitialNodes(architecture), [architecture]);
   const initialEdges = useMemo(() => buildInitialEdges(architecture), [architecture]);
 
@@ -174,12 +203,44 @@ function DiagramViewInner({ architecture }: DiagramViewProps) {
     nodeCounterRef.current = 1;
   }, [initialNodes, initialEdges, setNodes, setEdges]);
 
+  useEffect(() => {
+    if (!command) return;
+
+    if (command.action === "add" && command.nodeType) {
+      const index = nodeCounterRef.current;
+      nodeCounterRef.current += 1;
+      const nodeType = command.nodeType;
+
+      const newNode: Node<NodeData> = {
+        id: `${nodeType}-${index}`,
+        type: toFlowNodeType(nodeType),
+        data: { label: `${nodeType}-${index}` },
+        position: { x: 90 + index * 18, y: layerY[nodeType] },
+        draggable: true,
+      };
+      setNodes((currentNodes) => [...currentNodes, newNode]);
+      return;
+    }
+
+    if (command.action === "reset") {
+      setNodes(buildInitialNodes(architecture));
+      setEdges(buildInitialEdges(architecture));
+      return;
+    }
+
+    if (command.action === "clear") {
+      setNodes([]);
+      setEdges([]);
+    }
+  }, [architecture, command, setEdges, setNodes]);
+
   const onConnect = (connection: Connection) => {
     setEdges((currentEdges) =>
       addEdge(
         {
           ...connection,
           type: "smoothstep",
+          style: { stroke: "#64748b", strokeWidth: 1.8 },
           markerEnd: { type: MarkerType.ArrowClosed },
         },
         currentEdges
@@ -187,45 +248,8 @@ function DiagramViewInner({ architecture }: DiagramViewProps) {
     );
   };
 
-  const addNode = () => {
-    const index = nodeCounterRef.current;
-    nodeCounterRef.current += 1;
-
-    const newNode: Node<NodeData> = {
-      id: `service-${index}`,
-      type: "serviceNode",
-      data: { label: `service-${index}` },
-      position: { x: 40 + index * 20, y: 150 + index * 10 },
-      draggable: true,
-    };
-
-    setNodes((currentNodes) => [...currentNodes, newNode]);
-  };
-
-  const resetLayout = () => {
-    setNodes(buildInitialNodes(architecture));
-    setEdges(buildInitialEdges(architecture));
-  };
-
-  const clearDiagram = () => {
-    setNodes([]);
-    setEdges([]);
-  };
-
   return (
     <div className="diagram-canvas">
-      <div className="diagram-toolbar">
-        <button type="button" className="diagram-toolbar-btn" onClick={addNode}>
-          Add Node
-        </button>
-        <button type="button" className="diagram-toolbar-btn" onClick={resetLayout}>
-          Reset Layout
-        </button>
-        <button type="button" className="diagram-toolbar-btn danger" onClick={clearDiagram}>
-          Clear Diagram
-        </button>
-      </div>
-
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -238,18 +262,23 @@ function DiagramViewInner({ architecture }: DiagramViewProps) {
         elementsSelectable
         deleteKeyCode={["Backspace", "Delete"]}
         connectionLineType={ConnectionLineType.SmoothStep}
+        snapToGrid
+        snapGrid={[24, 24]}
+        minZoom={0.35}
+        maxZoom={1.7}
+        fitViewOptions={{ padding: 0.2 }}
       >
-        <Background color="#e5e7eb" gap={18} />
+        <Background color="#d1d5db" gap={24} />
         <Controls showInteractive />
       </ReactFlow>
     </div>
   );
 }
 
-export default function DiagramView({ architecture }: DiagramViewProps) {
+export default function DiagramView({ architecture, command }: DiagramViewProps) {
   return (
     <ReactFlowProvider>
-      <DiagramViewInner architecture={architecture} />
+      <DiagramViewInner architecture={architecture} command={command} />
     </ReactFlowProvider>
   );
 }
