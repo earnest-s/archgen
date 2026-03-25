@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+import json
+import os
+import urllib.error
+import urllib.request
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,9 +11,17 @@ from backend.core.inference import generate_explanation, preload_model
 
 app = FastAPI()
 
+MODEL_URL = os.getenv("MODEL_URL", "").strip()
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "").strip()
+
+if FRONTEND_ORIGIN:
+    allowed_origins = [origin.strip() for origin in FRONTEND_ORIGIN.split(",") if origin.strip()]
+else:
+    allowed_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -17,7 +30,15 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def preload_inference_model() -> None:
+    # If a dedicated model service is configured, backend acts as an orchestrator only.
+    if MODEL_URL:
+        return
     preload_model()
+
+
+@app.get("/healthz")
+async def healthz() -> dict:
+    return {"status": "ok"}
 
 
 def _parse_text_to_architecture(text: str) -> dict:
@@ -180,6 +201,28 @@ def _is_valid_architecture(architecture: object) -> bool:
     return True
 
 
+def _generate_explanation_with_model_service(architecture: dict) -> str:
+    endpoint = MODEL_URL.rstrip("/") + "/infer"
+    payload = json.dumps({"architecture": architecture}).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Model service unavailable at {endpoint}: {exc}") from exc
+
+    explanation = data.get("explanation") if isinstance(data, dict) else None
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise HTTPException(status_code=502, detail="Model service returned invalid explanation payload")
+    return explanation
+
+
 @app.post("/explain")
 async def explain(payload: dict):
     if not isinstance(payload, dict):
@@ -203,5 +246,8 @@ async def explain(payload: dict):
 
     print("FINAL ARCH:", architecture)
 
-    explanation = generate_explanation(architecture)
+    if MODEL_URL:
+        explanation = _generate_explanation_with_model_service(architecture)
+    else:
+        explanation = generate_explanation(architecture)
     return {"explanation": explanation, "architecture": architecture}
