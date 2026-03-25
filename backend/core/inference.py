@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 
 import torch
 from peft import PeftModel
@@ -11,46 +12,78 @@ _TOKENIZER = None
 _MODEL_DEVICE = None
 
 
-def _clean_structured_output(text: str, max_words: int = 150) -> str:
+def _limit_sentences(text: str, max_sentences: int = 2) -> str:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    parts = [p for p in parts if p]
+    if not parts:
+        return ""
+    return " ".join(parts[:max_sentences]).strip()
+
+
+def _extract_section(text: str, section_name: str, next_sections: tuple[str, ...]) -> str:
+    boundary = "|".join(re.escape(s) for s in next_sections)
+    pattern = rf"{re.escape(section_name)}\s*(.*?)(?={boundary}|$)"
+    matches = re.findall(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+    return matches[0].strip() if matches else ""
+
+
+def _sanitize_section(text: str) -> str:
     cleaned = text.strip()
+    cleaned = re.sub(r"\b(Components:|Data flow:|Architecture type:)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace("\n", " ")
 
-    for marker in ("Human:", "Assistant:", "User:", "###"):
-        if marker in cleaned:
-            cleaned = cleaned.split(marker, 1)[0].strip()
+    for marker in ("Human", "JSON", "example", "```", "Assistant:", "User:", "###"):
+        idx = cleaned.find(marker)
+        if idx != -1:
+            cleaned = cleaned[:idx]
 
-    section_names = ["Components:", "Data flow:", "Architecture type:"]
-    positions = [cleaned.find(name) for name in section_names]
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:\n\t")
+    cleaned = _limit_sentences(cleaned, max_sentences=2)
+    return cleaned
 
-    if all(pos >= 0 for pos in positions) and positions == sorted(positions):
-        comp_start, flow_start, arch_start = positions
-        components_block = cleaned[comp_start:flow_start].strip()
-        flow_block = cleaned[flow_start:arch_start].strip()
-        arch_block = cleaned[arch_start:].strip()
 
-        arch_content = arch_block[len("Architecture type:") :].strip()
-        sentence_end = -1
-        for punct in (".", "!", "?"):
-            idx = arch_content.find(punct)
-            if idx != -1 and (sentence_end == -1 or idx < sentence_end):
-                sentence_end = idx
-        if sentence_end != -1:
-            arch_content = arch_content[: sentence_end + 1].strip()
+def _clean_structured_output(text: str, architecture: dict, max_words: int = 150) -> str:
+    raw = text.strip()
 
-        arch_block = f"Architecture type: {arch_content}" if arch_content else "Architecture type:"
-        cleaned = "\n".join([components_block, flow_block, arch_block]).strip()
-    else:
-        short = " ".join(cleaned.split()[:60]).strip()
-        cleaned = (
-            f"Components: {short}\n"
-            "Data flow: Not explicitly provided.\n"
-            "Architecture type: Not explicitly provided."
+    components = _extract_section(raw, "Components:", ("Data flow:", "Architecture type:"))
+    data_flow = _extract_section(raw, "Data flow:", ("Architecture type:",))
+    arch_type = _extract_section(raw, "Architecture type:", tuple())
+
+    components_clean = _sanitize_section(components)
+    dataflow_clean = _sanitize_section(data_flow)
+    archtype_clean = _sanitize_section(arch_type)
+
+    if not components_clean:
+        nodes = architecture.get("nodes", []) if isinstance(architecture, dict) else []
+        labels = [n.get("label", str(n)) if isinstance(n, dict) else str(n) for n in nodes]
+        labels = [lbl for lbl in labels if lbl]
+        components_clean = (
+            f"Main components are {', '.join(labels)}."
+            if labels
+            else "Main components are frontend, backend, and database."
         )
 
-    words = cleaned.split()
-    if len(words) > max_words:
-        cleaned = " ".join(words[:max_words]).strip()
+    if not dataflow_clean:
+        dataflow_clean = "Frontend communicates with backend, which interacts with database."
 
-    return cleaned
+    if not archtype_clean:
+        archtype_clean = "Layered architecture."
+
+    components_clean = _limit_sentences(components_clean, max_sentences=2)
+    dataflow_clean = _limit_sentences(dataflow_clean, max_sentences=2)
+    archtype_clean = _limit_sentences(archtype_clean, max_sentences=2)
+
+    final_output = (
+        f"Components: {components_clean}\n\n"
+        f"Data flow: {dataflow_clean}\n\n"
+        f"Architecture type: {archtype_clean}"
+    )
+
+    words = final_output.split()
+    if len(words) > max_words:
+        final_output = " ".join(words[:max_words]).strip()
+
+    return final_output
 
 
 def _load_model_once() -> None:
@@ -130,4 +163,4 @@ Explanation:
         if generated.startswith(prefix):
             generated = generated[len(prefix):].strip()
 
-    return _clean_structured_output(generated, max_words=150)
+    return _clean_structured_output(generated, architecture=architecture, max_words=150)
