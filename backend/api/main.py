@@ -2,7 +2,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.inference import generate_explanation
+from backend.core.inference import generate_explanation, preload_model
 
 app = FastAPI()
 
@@ -13,6 +13,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def preload_inference_model() -> None:
+    preload_model()
 
 
 def _parse_text_to_architecture(text: str) -> dict:

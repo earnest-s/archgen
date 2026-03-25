@@ -127,6 +127,10 @@ def _load_model_once() -> None:
     _MODEL_DEVICE = next(_MODEL.parameters()).device
 
 
+def preload_model() -> None:
+    _load_model_once()
+
+
 def generate_explanation(architecture: dict) -> str:
     _load_model_once()
 
