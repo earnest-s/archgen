@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+
 from fastapi import FastAPI, HTTPException
 
 from backend.core.inference import generate_explanation, preload_model
@@ -6,6 +8,7 @@ from backend.core.inference import generate_explanation, preload_model
 app = FastAPI()
 MODEL_READY = False
 MODEL_ERROR = ""
+MODEL_ALLOW_FALLBACK = os.getenv("MODEL_ALLOW_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _fallback_explanation(architecture: dict) -> str:
@@ -55,6 +58,8 @@ async def preload_inference_model() -> None:
     except Exception as exc:  # noqa: BLE001
         MODEL_READY = False
         MODEL_ERROR = str(exc)
+        if not MODEL_ALLOW_FALLBACK:
+            raise
         # Keep service alive in degraded mode so docker-compose can start without GPU.
         print(f"Model preload failed, running in fallback mode: {MODEL_ERROR}")
 
