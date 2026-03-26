@@ -69,6 +69,10 @@ flatpak-spawn --host sh -lc 'cd /home/earnest/Downloads/Ai_Architecture_Generato
 - Exposes inference endpoint for backend:
 	- `POST /infer`
 
+GPU is configured via override file:
+
+- `docker-compose.gpu.yml`
+
 ## Environment Variables
 
 Configured via `.env` (example in `.env.example`):
@@ -111,7 +115,7 @@ Then restart:
 
 ```bash
 docker compose down
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
 
 Quick checks:
@@ -121,7 +125,23 @@ docker compose exec model python -c "import torch; print('cuda', torch.cuda.is_a
 docker compose logs -f model
 ```
 
-If CUDA is unavailable inside container, install NVIDIA Container Toolkit on host and restart Docker.
+If you get `failed to discover GPU vendor from CDI: no known GPU vendor found`, Docker GPU runtime is not configured on host yet.
+
+Fedora (NVIDIA) checklist:
+
+```bash
+nvidia-smi
+dnf list installed | grep -E "nvidia-container-toolkit|nvidia-driver"
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker run --rm --gpus all nvidia/cuda:12.3.2-runtime-ubuntu22.04 nvidia-smi
+```
+
+After that, rerun:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
 
 ## Health Endpoints
 
