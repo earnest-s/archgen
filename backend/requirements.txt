@@ -1,0 +1,16 @@
+torch
+torchvision
+timm
+transformers
+peft
+bitsandbytes
+accelerate
+fastapi
+uvicorn
+pydantic
+python-multipart
+pillow
+matplotlib
+scikit-learn
+nltk
+rouge-score
