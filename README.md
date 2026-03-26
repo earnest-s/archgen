@@ -82,6 +82,46 @@ Configured via `.env` (example in `.env.example`):
 - `MODEL_URL`
 	- Backend to model internal URL
 	- Default: `http://model:9000`
+- `MODEL_ALLOW_FALLBACK`
+	- `true`: if model preload fails, model service stays up and returns fallback responses
+	- `false`: fail fast when GPU/model load fails (recommended when validating real GPU inference)
+	- Default: `true`
+- `MODEL_GPUS`
+	- GPU request passed to Docker Compose for model service
+	- Default: `all`
+- `NVIDIA_VISIBLE_DEVICES`
+	- NVIDIA runtime visible devices
+	- Default: `all`
+- `NVIDIA_DRIVER_CAPABILITIES`
+	- NVIDIA runtime capabilities
+	- Default: `compute,utility`
+
+## GPU Mode (No Fallback)
+
+To force real model inference and fail if GPU is not available, set this in `.env`:
+
+```bash
+MODEL_ALLOW_FALLBACK=false
+MODEL_GPUS=all
+NVIDIA_VISIBLE_DEVICES=all
+NVIDIA_DRIVER_CAPABILITIES=compute,utility
+```
+
+Then restart:
+
+```bash
+docker compose down
+docker compose up --build
+```
+
+Quick checks:
+
+```bash
+docker compose exec model python -c "import torch; print('cuda', torch.cuda.is_available()); print('count', torch.cuda.device_count())"
+docker compose logs -f model
+```
+
+If CUDA is unavailable inside container, install NVIDIA Container Toolkit on host and restart Docker.
 
 ## Health Endpoints
 
