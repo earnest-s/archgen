@@ -3,8 +3,7 @@
 ArchitectAI is a full-stack architecture generation and editing app:
 
 - Frontend: React + Vite + React Flow visual editor
-- Backend: FastAPI API gateway
-- Model service: FastAPI inference service (separate container)
+- Backend: FastAPI with in-process Qwen + LoRA inference (GPU required)
 
 The project is containerized and designed to run with one command.
 
@@ -20,7 +19,6 @@ Then open:
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
-- Model service: http://localhost:9000
 
 Stop services:
 
@@ -53,25 +51,25 @@ flatpak-spawn --host sh -lc 'cd /home/earnest/Downloads/Ai_Architecture_Generato
 
 ### backend
 
-- Build context: project root, Dockerfile `backend/Dockerfile`
+- Build context: `backend/`, Dockerfile `backend/Dockerfile`
 - Runtime port: `8000`
 - Entry command:
 	- `uvicorn backend.api.main:app --host 0.0.0.0 --port 8000`
-- Handles parser + orchestration
-- Calls model service when `MODEL_URL` is set
+- Loads and warms up the real model at startup
+- Fails fast if CUDA is unavailable or model is not on GPU
 
-### model
+## GPU Requirements
 
-- Build context: project root, Dockerfile `backend/Dockerfile`
-- Runtime port: `9000`
-- Entry command:
-	- `uvicorn backend.api.model_service:app --host 0.0.0.0 --port 9000`
-- Exposes inference endpoint for backend:
-	- `POST /infer`
+The backend is GPU-only. There is no mock/rule fallback path.
 
-GPU is configured via override file:
+If Docker reports GPU vendor/runtime errors, configure NVIDIA runtime on host and retry:
 
-- `docker-compose.gpu.yml`
+```bash
+nvidia-smi
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
+docker run --rm --gpus all nvidia/cuda:12.3.2-runtime-ubuntu22.04 nvidia-smi
+```
 
 ## Environment Variables
 
@@ -79,20 +77,10 @@ Configured via `.env` (example in `.env.example`):
 
 - `VITE_API_URL`
 	- Frontend API base URL at build time
-	- Default: `http://localhost:8000`
+	- Default: `http://backend:8000`
 - `FRONTEND_ORIGIN`
 	- Backend CORS allow-list (comma-separated)
 	- Default: `http://localhost:5173`
-- `MODEL_URL`
-	- Backend to model internal URL
-	- Default: `http://model:9000`
-- `MODEL_ALLOW_FALLBACK`
-	- `true`: if model preload fails, model service stays up and returns fallback responses
-	- `false`: fail fast when GPU/model load fails (recommended when validating real GPU inference)
-	- Default: `true`
-- `MODEL_GPUS`
-	- GPU request passed to Docker Compose for model service
-	- Default: `all`
 - `NVIDIA_VISIBLE_DEVICES`
 	- NVIDIA runtime visible devices
 	- Default: `all`
@@ -100,55 +88,20 @@ Configured via `.env` (example in `.env.example`):
 	- NVIDIA runtime capabilities
 	- Default: `compute,utility`
 
-## GPU Mode (No Fallback)
+## Verify GPU In Container
 
-To force real model inference and fail if GPU is not available, set this in `.env`:
-
-```bash
-MODEL_ALLOW_FALLBACK=false
-MODEL_GPUS=all
-NVIDIA_VISIBLE_DEVICES=all
-NVIDIA_DRIVER_CAPABILITIES=compute,utility
-```
-
-Then restart:
+After startup:
 
 ```bash
-docker compose down
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
-```
-
-Quick checks:
-
-```bash
-docker compose exec model python -c "import torch; print('cuda', torch.cuda.is_available()); print('count', torch.cuda.device_count())"
-docker compose logs -f model
-```
-
-If you get `failed to discover GPU vendor from CDI: no known GPU vendor found`, Docker GPU runtime is not configured on host yet.
-
-Fedora (NVIDIA) checklist:
-
-```bash
-nvidia-smi
-dnf list installed | grep -E "nvidia-container-toolkit|nvidia-driver"
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-docker run --rm --gpus all nvidia/cuda:12.3.2-runtime-ubuntu22.04 nvidia-smi
-```
-
-After that, rerun:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+docker compose exec backend python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+docker compose exec backend nvidia-smi
 ```
 
 ## Health Endpoints
 
 - Backend: `GET /healthz`
-- Model: `GET /healthz`
 
-Compose healthchecks use these endpoints for startup ordering.
+Compose healthcheck uses backend endpoint for startup ordering.
 
 ## Docker Files
 
