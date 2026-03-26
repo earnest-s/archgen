@@ -3,11 +3,14 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    gpus: all
     ports:
       - "8000:8000"
     environment:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
       HF_HOME: /app/.cache/huggingface
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
     volumes:
       - ./checkpoints:/app/checkpoints
       - ./.cache:/app/.cache
