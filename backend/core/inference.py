@@ -119,6 +119,7 @@ def _load_model_once() -> None:
     base_model = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map="auto",
+        load_in_4bit=True,
         quantization_config=bnb_cfg,
     )
 
@@ -130,6 +131,11 @@ def _load_model_once() -> None:
     print(f"LoRA adapters loaded: {adapter_names}")
 
     _MODEL_DEVICE = next(_MODEL.parameters()).device
+    print("CUDA AVAILABLE:", torch.cuda.is_available())
+    print("MODEL DEVICE:", _MODEL_DEVICE)
+    print("GPU NAME:", torch.cuda.get_device_name(0))
+    if "cuda" not in str(_MODEL_DEVICE):
+        raise RuntimeError("Model is NOT using GPU")
 
 
 def preload_model() -> None:
@@ -138,6 +144,7 @@ def preload_model() -> None:
 
 def generate_explanation(architecture: dict) -> str:
     _load_model_once()
+    print("RUNNING REAL MODEL")
 
     architecture_json = json.dumps(architecture, ensure_ascii=True, indent=2)
     prompt = f"""
@@ -172,4 +179,7 @@ Explanation:
         if generated.startswith(prefix):
             generated = generated[len(prefix):].strip()
 
-    return _clean_structured_output(generated, architecture=architecture, max_words=150)
+    output = _clean_structured_output(generated, architecture=architecture, max_words=150)
+    print("OUTPUT LENGTH:", len(output))
+    print("GPU MEMORY:", torch.cuda.memory_allocated() / 1024**2, "MB")
+    return output
