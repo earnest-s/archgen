@@ -1,1 +1,1 @@
-{"root":["./src/App.tsx","./src/main.tsx","./src/components/DiagramView.tsx"],"version":"5.9.3"}
+{"root":["./src/App.tsx","./src/main.tsx","./src/remote-modules.d.ts","./src/vite-env.d.ts","./src/components/DiagramView.tsx"],"version":"5.9.3"}
