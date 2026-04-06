@@ -102,33 +102,32 @@ const DEFAULT_NODE_WIDTH = 150;
 const DEFAULT_NODE_HEIGHT = 40;
 
 const iconMap: Record<string, string> = {
-  docker: "https://cdn.simpleicons.org/docker",
-  postgresql: "https://cdn.simpleicons.org/postgresql",
-  postgres: "https://cdn.simpleicons.org/postgresql",
-  mysql: "https://cdn.simpleicons.org/mysql",
-  mariadb: "https://cdn.simpleicons.org/mariadb",
-  mongodb: "https://cdn.simpleicons.org/mongodb",
-  redis: "https://cdn.simpleicons.org/redis",
-  nginx: "https://cdn.simpleicons.org/nginx",
-  rabbitmq: "https://cdn.simpleicons.org/rabbitmq",
-  kafka: "https://cdn.simpleicons.org/apachekafka",
-  kubernetes: "https://cdn.simpleicons.org/kubernetes",
-  react: "https://cdn.simpleicons.org/react",
-  nodejs: "https://cdn.simpleicons.org/nodedotjs",
-  express: "https://cdn.simpleicons.org/express",
-  fastapi: "https://cdn.simpleicons.org/fastapi",
-  python: "https://cdn.simpleicons.org/python",
-  typescript: "https://cdn.simpleicons.org/typescript",
-  javascript: "https://cdn.simpleicons.org/javascript",
-  aws: "https://cdn.simpleicons.org/amazonwebservices",
-  gcp: "https://cdn.simpleicons.org/googlecloud",
-  azure: "https://cdn.simpleicons.org/microsoftazure",
-  grpc: "https://cdn.simpleicons.org/grpc",
-  graphql: "https://cdn.simpleicons.org/graphql",
-  elasticsearch: "https://cdn.simpleicons.org/elasticsearch",
-  prometheus: "https://cdn.simpleicons.org/prometheus",
-  grafana: "https://cdn.simpleicons.org/grafana",
+  docker: "docker",
+  postgresql: "postgres",
+  postgres: "postgres",
+  mysql: "mysql",
+  mongodb: "mongodb",
+  redis: "redis",
+  nginx: "nginx",
+  kafka: "kafka",
+  react: "react",
+  nodejs: "node",
+  node: "node",
+  fastapi: "fastapi",
 };
+
+const simpleIconMap = {
+  docker: siDocker,
+  postgres: siPostgresql,
+  mysql: siMysql,
+  mongodb: siMongodb,
+  redis: siRedis,
+  kafka: siApachekafka,
+  nginx: siNginx,
+  react: siReact,
+  node: siNodedotjs,
+  fastapi: siFastapi,
+} as const;
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
