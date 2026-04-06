@@ -748,6 +748,10 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     setEditingNodeId(nodeId);
   }, []);
 
+  const onCancelEdit = useCallback(() => {
+    setEditingNodeId(null);
+  }, []);
+
   const onCommitLabel = useCallback((nodeId: string, label: string) => {
     const clean = label.trim() || nodeId;
     setEditingNodeId(null);
@@ -787,11 +791,12 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           data: { ...node.data, editing: node.id === editingNodeId },
         })),
         onStartEdit,
-        onCommitLabel
+        onCommitLabel,
+        onCancelEdit
       ),
       edges: state.edges,
     }),
-    [editingNodeId, onCommitLabel, onStartEdit]
+    [editingNodeId, onCancelEdit, onCommitLabel, onStartEdit]
   );
 
   const applyGraphChange = useCallback(
