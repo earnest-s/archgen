@@ -27,7 +27,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def preload_inference_model() -> None:
     preload_model()
-    _ = generate_architecture("A frontend web client calls an API service which writes to a postgres database.")
+    _ = generate_architecture("A frontend web client calls an API service which writes to a postgres database.", deterministic=True)
     print("MODEL READY")
 
 

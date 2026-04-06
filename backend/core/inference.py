@@ -126,7 +126,7 @@ def preload_model() -> None:
     _load_model_once()
 
 
-def generate_architecture(text: str) -> tuple[dict, str]:
+def generate_architecture(text: str, deterministic: bool = False) -> tuple[dict, str]:
     _load_model_once()
     clean_text = text.strip()
     if not clean_text:
@@ -159,14 +159,14 @@ ONLY return JSON.
             max_new_tokens=300,
             temperature=0.3,
             top_p=0.9,
-            do_sample=True,
+            do_sample=not deterministic,
             eos_token_id=_TOKENIZER.eos_token_id,
             pad_token_id=_TOKENIZER.eos_token_id,
         )
 
-    result = _TOKENIZER.decode(outputs[0], skip_special_tokens=True).strip()
-    if result.startswith(prompt):
-        result = result[len(prompt):].strip()
+    input_len = inputs.input_ids.shape[1]
+    generated_ids = outputs[:, input_len:]
+    result = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
 
     print("RAW MODEL OUTPUT:", result[:500])
 
