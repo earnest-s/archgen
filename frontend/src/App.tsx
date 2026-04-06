@@ -2,6 +2,8 @@ import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import DiagramView from "./components/DiagramView";
 
 const API_URL = "http://127.0.0.1:8000/explain";
+const STORAGE_ARCH = "architectai-last-architecture";
+const STORAGE_INPUT = "architectai-last-input";
 
 const defaultText = "A frontend app calls an API service, which writes to postgres and publishes jobs to a queue.";
 
@@ -39,8 +41,20 @@ type EditorCommand = {
 type ThemeMode = "light" | "dark";
 
 function App() {
-  const [input, setInput] = useState(defaultText);
-  const [architecture, setArchitecture] = useState<Architecture | null>(null);
+  const [input, setInput] = useState(() => localStorage.getItem(STORAGE_INPUT) || defaultText);
+  const [architecture, setArchitecture] = useState<Architecture | null>(() => {
+    const raw = localStorage.getItem(STORAGE_ARCH);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Architecture;
+      if (Array.isArray(parsed.nodes) && Array.isArray(parsed.edges)) {
+        return parsed;
+      }
+    } catch {
+      // Ignore malformed saved state.
+    }
+    return null;
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [editorCommand, setEditorCommand] = useState<EditorCommand | null>(null);
@@ -56,9 +70,17 @@ function App() {
     localStorage.setItem("architectai-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_INPUT, input);
+  }, [input]);
+
   const sendEditorCommand = (action: EditorCommand["action"]) => {
     commandIdRef.current += 1;
     setEditorCommand({ id: commandIdRef.current, action });
+    if (action === "clear") {
+      setArchitecture(null);
+      localStorage.removeItem(STORAGE_ARCH);
+    }
   };
 
   const onDragNodeTemplate = (event: DragEvent<HTMLButtonElement>, nodeType: EditorNodeType) => {
@@ -115,7 +137,9 @@ function App() {
         arch.edges.length > 0;
 
       if (isValid) {
-        setArchitecture(data.architecture as Architecture);
+        const nextArchitecture = data.architecture as Architecture;
+        setArchitecture(nextArchitecture);
+        localStorage.setItem(STORAGE_ARCH, JSON.stringify(nextArchitecture));
         sendEditorCommand("reset");
       } else {
         throw new Error("Backend response did not include a valid architecture graph.");
