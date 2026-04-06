@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import time
 
 import torch
 from peft import PeftModel
@@ -14,6 +15,14 @@ _NODE_TYPE_ALIASES = {
     "data": "database",
     "db": "database",
     "worker": "service",
+}
+_LABEL_ALIASES = {
+    "request": "HTTP",
+    "http": "HTTP",
+    "db": "DB Query",
+    "db query": "DB Query",
+    "async": "Async",
+    "cache": "Cache",
 }
 
 
@@ -52,6 +61,31 @@ def _extract_json_object(raw_text: str) -> dict:
     if first_object is not None:
         return first_object
     raise ValueError("Model output did not contain a valid JSON object")
+
+
+def _normalize_label(label: str | None) -> str | None:
+    if not isinstance(label, str) or not label.strip():
+        return None
+    lowered = label.strip().lower()
+    for key, normalized in _LABEL_ALIASES.items():
+        if key in lowered:
+            return normalized
+    return label.strip()
+
+
+def _infer_edge_label(source_type: str, target_type: str, current: str | None) -> str:
+    normalized = _normalize_label(current)
+    if normalized:
+        return normalized
+    if source_type == "ui" and target_type == "service":
+        return "HTTP"
+    if source_type == "service" and target_type == "database":
+        return "DB Query"
+    if source_type == "service" and target_type == "queue":
+        return "Async"
+    if source_type == "service" and target_type == "cache":
+        return "Cache"
+    return "HTTP"
 
 
 def _validate_architecture(payload: dict) -> dict:
