@@ -753,6 +753,24 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           return { nodes, edges };
         });
       }
+
+      if (ctrlMeta && key === "d") {
+        event.preventDefault();
+        applyGraphChange((current) => {
+          const selected = current.nodes.filter((node) => node.selected);
+          if (selected.length === 0) return current;
+
+          const clones = selected.map((node, index) => ({
+            ...node,
+            id: `${node.id}-copy-${Date.now()}-${index}`,
+            position: { x: node.position.x + 40, y: node.position.y + 40 },
+            selected: false,
+            data: { ...node.data },
+          }));
+
+          return { ...current, nodes: [...current.nodes, ...clones] };
+        });
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
