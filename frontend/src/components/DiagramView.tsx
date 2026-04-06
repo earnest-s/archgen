@@ -568,8 +568,10 @@ function FallbackIcon({ type }: { type: string }) {
 
 function TechnologyIcon({ label, kind, type, icon }: { label: string; kind: FlowNodeKind; type: string; icon?: string }) {
   const [hasImageError, setHasImageError] = useState(false);
-  const inferred = inferIconFromLabel(label);
-  const iconUrl = getIconUrl(icon) || getIconUrl(inferred ?? undefined);
+  const hasExplicitIcon = Boolean(icon && icon !== "auto");
+  const explicitUrl = hasExplicitIcon ? getIconUrl(icon) : null;
+  const inferred = hasExplicitIcon ? null : inferIconFromLabel(label);
+  const iconUrl = explicitUrl || getIconUrl(inferred ?? undefined);
 
   useEffect(() => {
     setHasImageError(false);
