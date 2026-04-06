@@ -1,4 +1,4 @@
-import { ChangeEvent, DragEvent, useRef, useState } from "react";
+import { ChangeEvent, DragEvent, useEffect, useRef, useState } from "react";
 import DiagramView from "./components/DiagramView";
 
 const API_URL = "http://127.0.0.1:8000/explain";
@@ -31,13 +31,24 @@ type EditorCommand = {
   action: "reset" | "clear";
 };
 
+type ThemeMode = "light" | "dark";
+
 function App() {
   const [input, setInput] = useState(defaultText);
   const [architecture, setArchitecture] = useState<Architecture | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [editorCommand, setEditorCommand] = useState<EditorCommand | null>(null);
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const stored = localStorage.getItem("architectai-theme");
+    return stored === "dark" ? "dark" : "light";
+  });
   const commandIdRef = useRef(0);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("architectai-theme", theme);
+  }, [theme]);
 
   const sendEditorCommand = (action: EditorCommand["action"]) => {
     commandIdRef.current += 1;
@@ -155,7 +166,12 @@ function App() {
 
       <section className="editor-canvas-panel">
         {architecture ? (
-          <DiagramView architecture={architecture} command={editorCommand} />
+          <DiagramView
+            architecture={architecture}
+            command={editorCommand}
+            theme={theme}
+            onToggleTheme={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+          />
         ) : (
           <div className="empty-state">Run generation to render a model-produced architecture graph.</div>
         )}
