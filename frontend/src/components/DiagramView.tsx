@@ -793,6 +793,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      if (toolMode === "delete" || toolMode === "pan") return;
       applyGraphChange((current) => {
         if (!connection.source || !connection.target) return current;
         const sourceNode = current.nodes.find((n) => n.id === connection.source);
@@ -803,14 +804,14 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
         if (exists) return current;
 
         const suggested = protocolFromKinds(sourceNode, targetNode);
-        const chosen = normalizeProtocol(window.prompt("Edge type: HTTP, gRPC, Queue, DB Query, request", suggested));
-        const lineStyle: EdgeLine = chosen === "Queue" ? "async" : "sync";
+        const chosen = normalizeProtocol(window.prompt("Edge type: HTTP, gRPC, Async, Cache, DB Query, request", suggested));
+        const lineStyle: EdgeLine = chosen === "Async" ? "async" : "sync";
 
         const edge = createEdge(`e${Date.now()}`, connection.source, connection.target, chosen, lineStyle);
         return { ...current, edges: [...current.edges, edge] };
       });
     },
-    [applyGraphChange]
+    [applyGraphChange, toolMode]
   );
 
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
