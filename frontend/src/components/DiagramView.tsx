@@ -127,6 +127,26 @@ const simpleIconMap = {
   fastapi: siFastapi,
 } as const;
 
+const kindDefaultIconKey: Record<FlowNodeKind, keyof typeof simpleIconMap> = {
+  ui: "react",
+  service: "fastapi",
+  database: "postgres",
+  cache: "redis",
+  container: "docker",
+  gateway: "nginx",
+  queue: "kafka",
+};
+
+const serviceIconPool: Array<keyof typeof simpleIconMap> = ["fastapi", "node", "nginx", "docker", "kafka"];
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -247,7 +267,13 @@ function getIconKey(label: string, kind: FlowNodeKind): keyof typeof simpleIconM
       return matcher.icon;
     }
   }
-  return null;
+
+  if (kind === "service") {
+    const index = hashString(normalized || label) % serviceIconPool.length;
+    return serviceIconPool[index];
+  }
+
+  return kindDefaultIconKey[kind] ?? null;
 }
 
 function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
