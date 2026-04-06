@@ -10,6 +10,11 @@ _MODEL = None
 _TOKENIZER = None
 _MODEL_DEVICE = None
 _ALLOWED_NODE_TYPES = {"ui", "service", "database", "cache", "queue", "container"}
+_NODE_TYPE_ALIASES = {
+    "data": "database",
+    "db": "database",
+    "worker": "service",
+}
 
 
 def _extract_json_object(raw_text: str) -> dict:
@@ -41,13 +46,16 @@ def _validate_architecture(payload: dict) -> dict:
         node_type = node.get("type")
         if not isinstance(node_id, str) or not node_id.strip():
             raise ValueError("Each node must include a non-empty string 'id'")
-        if not isinstance(node_type, str) or node_type not in _ALLOWED_NODE_TYPES:
+        if not isinstance(node_type, str):
+            raise ValueError("Each node must include a valid 'type'")
+        normalized_type = _NODE_TYPE_ALIASES.get(node_type.strip().lower(), node_type.strip().lower())
+        if normalized_type not in _ALLOWED_NODE_TYPES:
             raise ValueError("Each node must include a valid 'type'")
         normalized_id = node_id.strip()
         if normalized_id in node_ids:
             raise ValueError(f"Duplicate node id '{normalized_id}'")
         node_ids.add(normalized_id)
-        normalized_nodes.append({"id": normalized_id, "type": node_type})
+        normalized_nodes.append({"id": normalized_id, "type": normalized_type})
 
     normalized_edges: list[dict[str, str]] = []
     for edge in edges:
