@@ -494,11 +494,22 @@ function cloneGraphState(state: GraphState): GraphState {
   };
 }
 
+function TechnologyIcon({ label }: { label: string }) {
+  const key = getIconKey(label);
+  if (!key) return <FiBox className="arch-node-icon" size={16} />;
+
+  const icon = simpleIconMap[key];
+  return (
+    <svg className="arch-node-logo" viewBox="0 0 24 24" role="img" aria-label={label}>
+      <path d={icon.path} fill={`#${icon.hex}`} />
+    </svg>
+  );
+}
+
 function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
   const [draft, setDraft] = useState(data.label);
   useEffect(() => setDraft(data.label), [data.label]);
 
-  const iconUrl = getIconUrl(data.label);
   const commit = () => {
     data.onCommitLabel?.(id, draft);
   };
@@ -506,7 +517,7 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
       <Handle type="target" position={Position.Top} />
-      {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <span className="arch-node-fallback" />}
+      <TechnologyIcon label={data.label} />
       {data.editing ? (
         <input
           className="arch-node-input nodrag nowheel"
@@ -531,14 +542,13 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
 function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
   const [draft, setDraft] = useState(data.label);
   useEffect(() => setDraft(data.label), [data.label]);
-  const iconUrl = getIconUrl(data.label);
 
   const commit = () => data.onCommitLabel?.(id, draft);
 
   return (
     <div className={`arch-container ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
       <div className="arch-container-header">
-        {iconUrl ? <img src={iconUrl} width={18} height={18} className="arch-node-logo" alt={data.label} /> : <span className="arch-node-fallback" />}
+        <TechnologyIcon label={data.label} />
         {data.editing ? (
           <input
             className="arch-node-input nodrag nowheel"
