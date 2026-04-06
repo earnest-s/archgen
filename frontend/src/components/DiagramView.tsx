@@ -297,14 +297,14 @@ function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
       strokeDasharray: lineStyle === "async" ? "6 4" : undefined,
     },
     labelStyle: {
-      fontSize: 10,
-      fill: "#0f172a",
+      fontSize: 11,
+      fill: "var(--edge-label-text)",
       fontWeight: 600,
     },
     labelBgStyle: {
-      fill: "#f8fafc",
+      fill: "var(--edge-label-bg)",
       fillOpacity: 0.92,
-      stroke: "#cbd5e1",
+      stroke: "var(--edge-label-border)",
       strokeWidth: 1,
     },
   };
@@ -371,7 +371,8 @@ function findContainerAtPoint(nodes: Node<NodeData>[], point: { x: number; y: nu
 function attachNodeCallbacks(
   nodes: Node<NodeData>[],
   onStartEdit: (nodeId: string) => void,
-  onCommitLabel: (nodeId: string, label: string) => void
+  onCommitLabel: (nodeId: string, label: string) => void,
+  onCancelEdit: () => void
 ): Node<NodeData>[] {
   return nodes.map((node) => ({
     ...node,
@@ -379,6 +380,7 @@ function attachNodeCallbacks(
       ...node.data,
       onStartEdit,
       onCommitLabel,
+      onCancelEdit,
     },
   }));
 }
