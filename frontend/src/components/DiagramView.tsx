@@ -1214,6 +1214,9 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
 
   const selectedNode = nodes.find((node) => node.selected);
   const selectedEdge = edges.find((edge) => edge.selected);
+  const defaultNodeStyle = theme === "dark"
+    ? { background: "#1e293b", borderColor: "#334155", textColor: "#f8fafc" }
+    : { background: "#ffffff", borderColor: "#e2e8f0", textColor: "#0f172a" };
 
   const updateSelectedNodeLabel = (label: string) => {
     if (!selectedNode) return;
@@ -1447,30 +1450,30 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             <input
               className="prop-input prop-color-input"
               type="color"
-              value={selectedNode.data.style?.background || "#ffffff"}
+              value={selectedNode.data.style?.background || defaultNodeStyle.background}
               onChange={(event) => updateSelectedNodeStyle("background", event.target.value)}
             />
             <label>Border</label>
             <input
               className="prop-input prop-color-input"
               type="color"
-              value={selectedNode.data.style?.borderColor || "#e2e8f0"}
+              value={selectedNode.data.style?.borderColor || defaultNodeStyle.borderColor}
               onChange={(event) => updateSelectedNodeStyle("borderColor", event.target.value)}
             />
             <label>Text</label>
             <input
               className="prop-input prop-color-input"
               type="color"
-              value={selectedNode.data.style?.textColor || "#0f172a"}
+              value={selectedNode.data.style?.textColor || defaultNodeStyle.textColor}
               onChange={(event) => updateSelectedNodeStyle("textColor", event.target.value)}
             />
             <label>Color Preview</label>
             <div
               className="prop-color-preview"
               style={{
-                background: selectedNode.data.style?.background || "#ffffff",
-                borderColor: selectedNode.data.style?.borderColor || "#e2e8f0",
-                color: selectedNode.data.style?.textColor || "#0f172a",
+                background: selectedNode.data.style?.background || defaultNodeStyle.background,
+                borderColor: selectedNode.data.style?.borderColor || defaultNodeStyle.borderColor,
+                color: selectedNode.data.style?.textColor || defaultNodeStyle.textColor,
               }}
             />
           </div>
