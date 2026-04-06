@@ -1,6 +1,6 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
-import { FiBox, FiDatabase, FiGlobe, FiHardDrive, FiLayers, FiMoon, FiMousePointer, FiPlusCircle, FiServer, FiSun, FiZap } from "react-icons/fi";
+import { FiBox, FiDatabase, FiGlobe, FiLayers, FiMoon, FiMousePointer, FiPlusCircle, FiServer, FiSun, FiZap } from "react-icons/fi";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -106,14 +106,6 @@ const iconUrlMap: Record<Exclude<IconOption, "generic">, string> = {
   node: "https://cdn.simpleicons.org/nodedotjs",
   aws: "https://cdn.simpleicons.org/amazonaws",
 };
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
-  }
-  return hash;
-}
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
@@ -1265,14 +1257,14 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           </div>
           <div className="menu-group">
             <span className="menu-title">Edit</span>
-            <button type="button" className="menu-btn" onClick={() => void applyAutoLayout(graphRef.current)}>Auto Layout</button>
             <button type="button" className="menu-btn" onClick={undo}>Undo</button>
             <button type="button" className="menu-btn" onClick={redo}>Redo</button>
+            <button type="button" className="menu-btn" onClick={() => void applyAutoLayout(graphRef.current)}>Auto Layout</button>
+            <button type="button" className="menu-btn icon-btn" title="Light / Dark" onClick={onToggleTheme}>{theme === "dark" ? <FiSun /> : <FiMoon />}</button>
           </div>
           <div className="menu-group">
             <button type="button" className={`menu-btn icon-btn ${toolMode === "select" ? "active" : ""}`} title="Select" onClick={() => setToolMode("select")}><FiMousePointer /></button>
             <button type="button" className={`menu-btn icon-btn ${toolMode === "connect" ? "active" : ""}`} title="Connect" onClick={() => setToolMode("connect")}><FiPlusCircle /></button>
-            <button type="button" className="menu-btn icon-btn" title="Light / Dark" onClick={onToggleTheme}>{theme === "dark" ? <FiSun /> : <FiMoon />}</button>
           </div>
         </div>
 
