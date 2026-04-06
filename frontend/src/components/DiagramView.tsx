@@ -18,6 +18,8 @@ import ReactFlow, {
   Position,
   ReactFlowProvider,
   ReactFlowInstance,
+  useEdgesState,
+  useNodesState,
   useReactFlow,
 } from "reactflow";
 import {
@@ -76,6 +78,7 @@ type NodeData = {
   editing?: boolean;
   onStartEdit?: (nodeId: string) => void;
   onCommitLabel?: (nodeId: string, label: string) => void;
+  onCancelEdit?: () => void;
 };
 
 type EdgeData = {
