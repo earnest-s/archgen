@@ -135,6 +135,7 @@ function detectKindFromLabel(label: string, fallbackType?: string): FlowNodeKind
   if (normalized.includes("frontend") || normalized.includes("ui") || normalized.includes("client")) return "ui";
 
   if (fallbackType === "ui") return "ui";
+  if (fallbackType === "database") return "database";
   if (fallbackType === "data") return "database";
   return "service";
 }
@@ -395,19 +396,21 @@ function buildHierarchyEdges(nodes: Node<NodeData>[]): Edge<EdgeData>[] {
 function buildEdgesFromArchitecture(nodes: Node<NodeData>[], architecture: Architecture): Edge<EdgeData>[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
-  const candidate = architecture.edges
+  return dedupeEdges(
+    architecture.edges
     .filter((edge) => typeof edge.source === "string" && typeof edge.target === "string")
     .map((edge, index) => {
       const sourceNode = byId.get(edge.source);
       const targetNode = byId.get(edge.target);
-      if (!isAllowedHierarchyEdge(sourceNode, targetNode)) return null;
-      const edgeType = protocolFromKinds(sourceNode, targetNode);
-      return createEdge(`e${index + 1}`, edge.source, edge.target, edgeType, edgeType === "Queue" ? "async" : "sync");
-    })
-    .filter((edge): edge is Edge<EdgeData> => edge !== null);
+      if (!sourceNode || !targetNode) return null;
 
-  if (candidate.length > 0) return dedupeEdges(candidate);
-  return buildHierarchyEdges(nodes);
+      const label = typeof edge.label === "string" ? edge.label : undefined;
+      const edgeType = normalizeProtocol(label ?? protocolFromKinds(sourceNode, targetNode));
+      const lineStyle: EdgeLine = edgeType === "Queue" ? "async" : "sync";
+      return createEdge(`e${index + 1}`, edge.source, edge.target, edgeType, lineStyle);
+    })
+    .filter((edge): edge is Edge<EdgeData> => edge !== null)
+  );
 }
 
 async function applyDagreLayout(nodes: Node<NodeData>[], edges: Edge<EdgeData>[]): Promise<Node<NodeData>[]> {
@@ -899,7 +902,7 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
           .filter((e): e is Edge<EdgeData> => e !== null)
       );
 
-      const next = { nodes, edges: edges.length > 0 ? edges : buildHierarchyEdges(nodes) };
+      const next = { nodes, edges };
       applyGraphChange(() => next);
       void applyAutoLayout(next);
     } catch {
