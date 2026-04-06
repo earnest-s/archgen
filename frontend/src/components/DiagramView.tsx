@@ -356,7 +356,7 @@ function dedupeEdges(edges: Edge<EdgeData>[]): Edge<EdgeData>[] {
     if (edge.source === edge.target || seen.has(key)) return;
     seen.add(key);
     const edgeType = edge.data?.edgeType ?? "request";
-    const lineStyle = edge.data?.lineStyle ?? (edgeType === "Queue" ? "async" : "sync");
+    const lineStyle = edge.data?.lineStyle ?? (edgeType === "Async" ? "async" : "sync");
     out.push(createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle));
   });
   return out;
@@ -1015,7 +1015,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             if (typeof edge.source !== "string" || typeof edge.target !== "string") return null;
             if (!nodeSet.has(edge.source) || !nodeSet.has(edge.target)) return null;
             const edgeType = normalizeProtocol(typeof edge.data?.edgeType === "string" ? edge.data.edgeType : "request");
-            const lineStyle: EdgeLine = edgeType === "Queue" ? "async" : "sync";
+            const lineStyle: EdgeLine = edgeType === "Async" ? "async" : "sync";
             return createEdge(`i${index + 1}`, edge.source, edge.target, edgeType, lineStyle);
           })
           .filter((e): e is Edge<EdgeData> => e !== null)
