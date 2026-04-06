@@ -127,6 +127,9 @@ function App() {
       <aside className="editor-sidebar">
         <h1>ArchitectAI</h1>
         <p className="sub">Enter text. Backend runs the model and returns a graph JSON.</p>
+        <button type="button" className="tool-btn" onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}>
+          {theme === "light" ? "Switch To Dark" : "Switch To Light"}
+        </button>
 
         <label htmlFor="architecture-input">Architecture Description</label>
         <textarea
