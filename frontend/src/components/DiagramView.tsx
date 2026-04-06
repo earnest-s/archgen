@@ -1001,7 +1001,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   );
 
   const onEdgeClick = useCallback(
-    (_event: React.MouseEvent, edge: Edge<EdgeData>) => {
+    (event: React.MouseEvent, edge: Edge<EdgeData>) => {
       if (toolMode === "delete") {
         applyGraphChange((current) => ({
           ...current,
@@ -1010,20 +1010,29 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
         return;
       }
 
-      const nextLabel = window.prompt("Edit edge label", String(edge.label ?? edge.data?.edgeType ?? "HTTP"));
-      if (!nextLabel || !nextLabel.trim()) return;
-
-      const nextType = normalizeProtocol(nextLabel);
-      const nextLineStyle: EdgeLine = nextType === "Async" ? "async" : "sync";
-
-      applyGraphChange((current) => ({
-        ...current,
-        edges: current.edges.map((item) =>
-          item.id === edge.id ? createEdge(item.id, item.source, item.target, nextType, nextLineStyle) : item
-        ),
-      }));
+      const bounds = wrapperRef.current?.getBoundingClientRect();
+      const x = bounds ? event.clientX - bounds.left : 16;
+      const y = bounds ? event.clientY - bounds.top : 16;
+      setEdgeEditor({
+        edgeId: edge.id,
+        x,
+        y,
+        value: String(edge.label ?? edge.data?.edgeType ?? "HTTP"),
+      });
     },
     [applyGraphChange, toolMode]
+  );
+
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge<EdgeData>) => {
+      event.preventDefault();
+      applyGraphChange((current) => ({
+        ...current,
+        edges: current.edges.filter((item) => item.id !== edge.id),
+      }));
+      setEdgeEditor(null);
+    },
+    [applyGraphChange]
   );
 
   const onNodeClick = useCallback(
