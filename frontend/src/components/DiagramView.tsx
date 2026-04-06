@@ -1,6 +1,6 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
-import { FiBox, FiDatabase, FiHardDrive, FiLayers, FiMonitor, FiMoon, FiMousePointer, FiPackage, FiPlusCircle, FiServer, FiSun } from "react-icons/fi";
+import { FiBox, FiDatabase, FiGlobe, FiHardDrive, FiLayers, FiMoon, FiMousePointer, FiPlusCircle, FiServer, FiSun, FiZap } from "react-icons/fi";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -21,18 +21,6 @@ import ReactFlow, {
   useNodesState,
   useReactFlow,
 } from "reactflow";
-import {
-  siApachekafka,
-  siDocker,
-  siFastapi,
-  siMongodb,
-  siMysql,
-  siNodedotjs,
-  siNginx,
-  siPostgresql,
-  siReact,
-  siRedis,
-} from "simple-icons";
 import "reactflow/dist/style.css";
 
 type ArchitectureNode = {
@@ -74,6 +62,8 @@ type ToolMode = "select" | "connect";
 type NodeData = {
   label: string;
   kind: FlowNodeKind;
+  type: string;
+  icon?: string;
   editing?: boolean;
   onStartEdit?: (nodeId: string) => void;
   onCommitLabel?: (nodeId: string, label: string) => void;
@@ -103,43 +93,19 @@ const CONTAINER_HEIGHT = 230;
 const DEFAULT_NODE_WIDTH = 150;
 const DEFAULT_NODE_HEIGHT = 40;
 
-const simpleIconMatchers: Array<{ keywords: string[]; icon: keyof typeof simpleIconMap }> = [
-  { keywords: ["postgresql", "postgres", "pgsql"], icon: "postgres" },
-  { keywords: ["mysql", "mariadb"], icon: "mysql" },
-  { keywords: ["mongodb", "mongo"], icon: "mongodb" },
-  { keywords: ["redis", "memcached", "cache"], icon: "redis" },
-  { keywords: ["kafka", "rabbitmq", "sqs", "queue", "broker"], icon: "kafka" },
-  { keywords: ["nginx", "gateway", "proxy", "ingress"], icon: "nginx" },
-  { keywords: ["react", "frontend", "client", "web", "ui"], icon: "react" },
-  { keywords: ["nodejs", "node", "express", "nestjs"], icon: "node" },
-  { keywords: ["fastapi", "flask", "django", "spring", "laravel"], icon: "fastapi" },
-  { keywords: ["docker", "container", "kubernetes", "k8s", "pod"], icon: "docker" },
-];
+const ICON_OPTIONS = ["postgres", "redis", "kafka", "docker", "nginx", "react", "node", "aws", "generic"] as const;
+type IconOption = (typeof ICON_OPTIONS)[number];
 
-const simpleIconMap = {
-  docker: siDocker,
-  postgres: siPostgresql,
-  mysql: siMysql,
-  mongodb: siMongodb,
-  redis: siRedis,
-  kafka: siApachekafka,
-  nginx: siNginx,
-  react: siReact,
-  node: siNodedotjs,
-  fastapi: siFastapi,
-} as const;
-
-const kindDefaultIconKey: Record<FlowNodeKind, keyof typeof simpleIconMap> = {
-  ui: "react",
-  service: "fastapi",
-  database: "postgres",
-  cache: "redis",
-  container: "docker",
-  gateway: "nginx",
-  queue: "kafka",
+const iconUrlMap: Record<Exclude<IconOption, "generic">, string> = {
+  postgres: "https://cdn.simpleicons.org/postgresql",
+  redis: "https://cdn.simpleicons.org/redis",
+  kafka: "https://cdn.simpleicons.org/apachekafka",
+  docker: "https://cdn.simpleicons.org/docker",
+  nginx: "https://cdn.simpleicons.org/nginx",
+  react: "https://cdn.simpleicons.org/react",
+  node: "https://cdn.simpleicons.org/nodedotjs",
+  aws: "https://cdn.simpleicons.org/amazonaws",
 };
-
-const serviceIconPool: Array<keyof typeof simpleIconMap> = ["fastapi", "node", "nginx", "react", "kafka"];
 
 function hashString(value: string): number {
   let hash = 0;
@@ -151,6 +117,24 @@ function hashString(value: string): number {
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function iconUrlForOption(icon: string | undefined): string | null {
+  if (!icon || icon === "generic") return null;
+  return iconUrlMap[icon as Exclude<IconOption, "generic">] ?? null;
+}
+
+function inferIconFromLabel(label: string): IconOption | null {
+  const normalized = normalizeLabel(label);
+  if (normalized.includes("postgres")) return "postgres";
+  if (normalized.includes("redis")) return "redis";
+  if (normalized.includes("kafka") || normalized.includes("queue") || normalized.includes("broker")) return "kafka";
+  if (normalized.includes("docker") || normalized.includes("container")) return "docker";
+  if (normalized.includes("nginx") || normalized.includes("gateway") || normalized.includes("proxy")) return "nginx";
+  if (normalized.includes("react") || normalized.includes("frontend") || normalized.includes("ui")) return "react";
+  if (normalized.includes("node") || normalized.includes("api") || normalized.includes("service")) return "node";
+  if (normalized.includes("aws")) return "aws";
+  return null;
 }
 
 function detectKindFromLabel(label: string, fallbackType?: string): FlowNodeKind {
@@ -248,39 +232,6 @@ function nodeThemeClass(kind: FlowNodeKind): string {
   if (kind === "gateway") return "arch-node-gateway";
   if (kind === "queue") return "arch-node-queue";
   return "arch-node-service";
-}
-
-function getIconKey(label: string, kind: FlowNodeKind): keyof typeof simpleIconMap | null {
-  const normalized = normalizeLabel(label);
-
-  if (kind === "ui") return "react";
-  if (kind === "queue") return "kafka";
-  if (kind === "cache") return "redis";
-  if (kind === "container") return "docker";
-  if (kind === "gateway") return "nginx";
-  if (kind === "database") {
-    const databaseLabel = normalizeLabel(label);
-    if (databaseLabel.includes("mysql") || databaseLabel.includes("mariadb")) return "mysql";
-    if (databaseLabel.includes("mongo")) return "mongodb";
-    return "postgres";
-  }
-
-  if (kind === "service" && (normalized === "api" || normalized.endsWith(" api") || normalized.startsWith("api "))) {
-    return "fastapi";
-  }
-
-  for (const matcher of simpleIconMatchers) {
-    if (matcher.keywords.some((keyword) => normalized === keyword || normalized.includes(keyword))) {
-      return matcher.icon;
-    }
-  }
-
-  if (kind === "service") {
-    const index = hashString(normalized || label) % serviceIconPool.length;
-    return serviceIconPool[index];
-  }
-
-  return kindDefaultIconKey[kind] ?? null;
 }
 
 function getProtocolVisual(_edgeType: EdgeProtocol, lineStyle: EdgeLine): {
@@ -390,7 +341,7 @@ function buildNodeFromTemplate(template: EditorNodeType, id: string, position: {
     return {
       id,
       type: "containerNode",
-      data: { label: id, kind },
+      data: { label: id, kind, type: kind },
       position,
       style: { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT },
       draggable: true,
@@ -401,7 +352,7 @@ function buildNodeFromTemplate(template: EditorNodeType, id: string, position: {
   return {
     id,
     type: toFlowNodeType(kind),
-    data: { label: id, kind },
+    data: { label: id, kind, type: kind },
     position,
     draggable: true,
     selectable: true,
@@ -468,7 +419,7 @@ function buildNodesFromArchitecture(architecture: Architecture): Node<NodeData>[
     grouped[layer].push({
       id: node.id,
       type: toFlowNodeType(kind),
-      data: { label: node.id, kind },
+      data: { label: node.id, kind, type: kind },
       position: { x: 0, y: layerY[layer] },
       draggable: true,
       selectable: true,
@@ -593,29 +544,27 @@ function cloneGraphState(state: GraphState): GraphState {
   };
 }
 
-function getFallbackIcon(kind: FlowNodeKind) {
-  if (kind === "ui") return FiMonitor;
-  if (kind === "database") return FiDatabase;
-  if (kind === "cache") return FiHardDrive;
-  if (kind === "queue") return FiLayers;
-  if (kind === "container") return FiPackage;
-  if (kind === "gateway") return FiBox;
+function getFallbackIcon(type: string) {
+  const normalizedType = normalizeLabel(type);
+  if (normalizedType === "ui") return FiGlobe;
+  if (normalizedType === "database" || normalizedType === "db") return FiDatabase;
+  if (normalizedType === "cache") return FiZap;
+  if (normalizedType === "queue") return FiLayers;
+  if (normalizedType === "container") return FiBox;
+  if (normalizedType === "gateway") return FiBox;
   return FiServer;
 }
 
-function TechnologyIcon({ label, kind }: { label: string; kind: FlowNodeKind }) {
-  const key = getIconKey(label, kind);
-  if (!key) {
-    const FallbackIcon = getFallbackIcon(kind);
+function TechnologyIcon({ label, kind, type, icon }: { label: string; kind: FlowNodeKind; type: string; icon?: string }) {
+  const iconKey = icon || inferIconFromLabel(label) || undefined;
+  const iconUrl = iconUrlForOption(iconKey);
+
+  if (!iconUrl) {
+    const FallbackIcon = getFallbackIcon(type || kind);
     return <FallbackIcon className="arch-node-icon" size={16} />;
   }
 
-  const icon = simpleIconMap[key];
-  return (
-    <svg className="arch-node-logo" viewBox="0 0 24 24" role="img" aria-label={label}>
-      <path d={icon.path} fill={`#${icon.hex}`} />
-    </svg>
-  );
+  return <img className="arch-node-logo" src={iconUrl} alt={label} width={16} height={16} loading="lazy" decoding="async" />;
 }
 
 function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
@@ -630,7 +579,7 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
       <Handle type="target" position={Position.Top} />
-      <TechnologyIcon label={data.label} kind={data.kind} />
+      <TechnologyIcon label={data.label} kind={data.kind} type={data.type} icon={data.icon} />
       {data.editing ? (
         <input
           className="arch-node-input nodrag nowheel"
@@ -676,7 +625,7 @@ function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-container ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
       <div className="arch-container-header">
-        <TechnologyIcon label={data.label} kind={data.kind} />
+        <TechnologyIcon label={data.label} kind={data.kind} type={data.type} icon={data.icon} />
         {data.editing ? (
           <input
             className="arch-node-input nodrag nowheel"
@@ -770,6 +719,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             ...node.data,
             label: clean,
             kind,
+            type: kind,
             editing: false,
             onStartEdit,
             onCommitLabel,
@@ -1138,23 +1088,24 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
 
   const onExportPng = useCallback(async () => {
     if (!wrapperRef.current) return;
+    const viewport = wrapperRef.current.querySelector(".react-flow__viewport") as HTMLElement | null;
+    if (!viewport) return;
     try {
-      const rootStyles = getComputedStyle(document.documentElement);
-      const backgroundColor = rootStyles.getPropertyValue("--bg-canvas").trim();
-      const dataUrl = await toPng(wrapperRef.current, {
+      const dataUrl = await toPng(viewport, {
         cacheBust: true,
-        backgroundColor,
+        backgroundColor: theme === "dark" ? "#0f172a" : "#ffffff",
+        filter: (node) => !node.classList?.contains("toolbar"),
       });
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = "architecture-diagram.png";
+      link.download = "architecture.png";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch {
       // Ignore export errors in UI.
     }
-  }, []);
+  }, [theme]);
 
   const onImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1175,7 +1126,17 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             x: typeof node.position?.x === "number" ? node.position.x : index * 40,
             y: typeof node.position?.y === "number" ? node.position.y : layerY[toLayer(kind)],
           });
-          built.data = { ...built.data, label, kind };
+          built.data = {
+            ...built.data,
+            label,
+            kind,
+            type: typeof (node as { data?: { type?: unknown } }).data?.type === "string"
+              ? String((node as { data?: { type?: unknown } }).data?.type)
+              : kind,
+            icon: typeof (node as { data?: { icon?: unknown } }).data?.icon === "string"
+              ? String((node as { data?: { icon?: unknown } }).data?.icon)
+              : undefined,
+          };
           return built;
         })
         .filter((n): n is Node<NodeData> => n !== null);
@@ -1225,8 +1186,26 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           data: {
             ...node.data,
             kind,
+            type: kind,
           },
           style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : undefined,
+        };
+      }),
+    }));
+  };
+
+  const updateSelectedNodeIcon = (icon: string) => {
+    if (!selectedNode) return;
+    applyGraphChange((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => {
+        if (node.id !== selectedNode.id) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            icon: icon === "" ? undefined : icon,
+          },
         };
       }),
     }));
@@ -1276,7 +1255,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   return (
     <div className="diagram-editor">
       <div className="diagram-workspace" ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
-        <div className="diagram-menubar">
+        <div className="diagram-menubar toolbar">
           <div className="menu-group">
             <span className="menu-title">File</span>
             <button type="button" className="menu-btn" onClick={onExportJson}>Export JSON</button>
@@ -1374,6 +1353,13 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
               <option value="cache">cache</option>
               <option value="queue">queue</option>
               <option value="container">container</option>
+            </select>
+            <label>Icon</label>
+            <select className="prop-input" value={selectedNode.data.icon ?? ""} onChange={(event) => updateSelectedNodeIcon(event.target.value)}>
+              <option value="">auto</option>
+              {ICON_OPTIONS.map((iconName) => (
+                <option key={iconName} value={iconName}>{iconName}</option>
+              ))}
             </select>
             <label>Color Preview</label>
             <div className={`prop-color-preview ${nodeThemeClass(selectedNode.data.kind)}`} />
