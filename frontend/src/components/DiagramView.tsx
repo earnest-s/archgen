@@ -17,7 +17,6 @@ import ReactFlow, {
   NodeProps,
   Position,
   ReactFlowProvider,
-  ReactFlowInstance,
   useEdgesState,
   useNodesState,
   useReactFlow,
@@ -284,7 +283,7 @@ function getIconKey(label: string, kind: FlowNodeKind): keyof typeof simpleIconM
   return kindDefaultIconKey[kind] ?? null;
 }
 
-function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
+function getProtocolVisual(_edgeType: EdgeProtocol, lineStyle: EdgeLine): {
   style: React.CSSProperties;
   labelStyle: React.CSSProperties;
   labelBgStyle: React.CSSProperties;
@@ -1140,9 +1139,11 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   const onExportPng = useCallback(async () => {
     if (!wrapperRef.current) return;
     try {
+      const rootStyles = getComputedStyle(document.documentElement);
+      const backgroundColor = rootStyles.getPropertyValue("--bg-canvas").trim();
       const dataUrl = await toPng(wrapperRef.current, {
         cacheBust: true,
-        backgroundColor: theme === "dark" ? "#0f172a" : "#f8fafc",
+        backgroundColor,
       });
       const link = document.createElement("a");
       link.href = dataUrl;
@@ -1153,7 +1154,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     } catch {
       // Ignore export errors in UI.
     }
-  }, [theme]);
+  }, []);
 
   const onImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
