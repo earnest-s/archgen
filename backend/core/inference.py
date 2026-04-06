@@ -119,7 +119,6 @@ def _load_model_once() -> None:
     base_model = AutoModelForCausalLM.from_pretrained(
         model_id,
         device_map="auto",
-        load_in_4bit=True,
         quantization_config=bnb_cfg,
     )
 
