@@ -110,7 +110,7 @@ const simpleIconMatchers: Array<{ keywords: string[]; icon: keyof typeof simpleI
   { keywords: ["nginx", "gateway", "proxy", "ingress"], icon: "nginx" },
   { keywords: ["react", "frontend", "client", "web", "ui"], icon: "react" },
   { keywords: ["nodejs", "node", "express", "nestjs"], icon: "node" },
-  { keywords: ["fastapi", "api", "backend", "service"], icon: "fastapi" },
+  { keywords: ["fastapi", "flask", "django", "spring", "laravel"], icon: "fastapi" },
   { keywords: ["docker", "container", "kubernetes", "k8s", "pod"], icon: "docker" },
 ];
 
@@ -137,7 +137,7 @@ const kindDefaultIconKey: Record<FlowNodeKind, keyof typeof simpleIconMap> = {
   queue: "kafka",
 };
 
-const serviceIconPool: Array<keyof typeof simpleIconMap> = ["fastapi", "node", "nginx", "docker", "kafka"];
+const serviceIconPool: Array<keyof typeof simpleIconMap> = ["fastapi", "node", "nginx", "react", "kafka"];
 
 function hashString(value: string): number {
   let hash = 0;
@@ -249,6 +249,8 @@ function nodeThemeClass(kind: FlowNodeKind): string {
 }
 
 function getIconKey(label: string, kind: FlowNodeKind): keyof typeof simpleIconMap | null {
+  const normalized = normalizeLabel(label);
+
   if (kind === "ui") return "react";
   if (kind === "queue") return "kafka";
   if (kind === "cache") return "redis";
@@ -261,7 +263,10 @@ function getIconKey(label: string, kind: FlowNodeKind): keyof typeof simpleIconM
     return "postgres";
   }
 
-  const normalized = normalizeLabel(label);
+  if (kind === "service" && (normalized === "api" || normalized.endsWith(" api") || normalized.startsWith("api "))) {
+    return "fastapi";
+  }
+
   for (const matcher of simpleIconMatchers) {
     if (matcher.keywords.some((keyword) => normalized === keyword || normalized.includes(keyword))) {
       return matcher.icon;
