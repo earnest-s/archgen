@@ -24,6 +24,11 @@ type Architecture = {
   [key: string]: unknown;
 };
 
+const EMPTY_ARCHITECTURE: Architecture = {
+  nodes: [],
+  edges: [],
+};
+
 type EditorNodeType = "ui" | "service" | "data" | "cache" | "queue" | "container";
 
 type EditorCommand = {
@@ -47,6 +52,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
     localStorage.setItem("architectai-theme", theme);
   }, [theme]);
 
@@ -168,16 +174,12 @@ function App() {
       </aside>
 
       <section className="editor-canvas-panel">
-        {architecture ? (
-          <DiagramView
-            architecture={architecture}
-            command={editorCommand}
-            theme={theme}
-            onToggleTheme={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
-          />
-        ) : (
-          <div className="empty-state">Run generation to render a model-produced architecture graph.</div>
-        )}
+        <DiagramView
+          architecture={architecture ?? EMPTY_ARCHITECTURE}
+          command={editorCommand}
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+        />
       </section>
     </main>
   );

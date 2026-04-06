@@ -289,7 +289,7 @@ function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
   labelStyle: React.CSSProperties;
   labelBgStyle: React.CSSProperties;
 } {
-  const baseColor = edgeType === "HTTP" ? "#2563eb" : edgeType === "DB Query" ? "#ea580c" : edgeType === "Async" ? "#7c3aed" : edgeType === "Cache" ? "#0d9488" : "#64748b";
+  const baseColor = "var(--edge-color)";
   return {
     style: {
       stroke: baseColor,
@@ -432,7 +432,7 @@ function createEdge(
     target,
     type: "smoothstep",
     className: "arch-edge",
-    markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
+    markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: "var(--edge-color)" },
     data: { edgeType, lineStyle },
     label: edgeType,
     style: visual.style,
@@ -876,11 +876,17 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   }, [architecture, command, applyAutoLayout, applyGraphChange]);
 
   useEffect(() => {
+    if (nodes.length === 0) return;
     const timer = window.setTimeout(() => {
       reactFlow.fitView({ padding: 0.2, duration: 250 });
-    }, 80);
+    }, 50);
     return () => window.clearTimeout(timer);
-  }, [nodes, edges, reactFlow]);
+  }, [nodes, reactFlow]);
+
+  useEffect(() => {
+    console.log("NODES:", nodes);
+    console.log("EDGES:", edges);
+  }, [nodes, edges]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1325,6 +1331,10 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           <Background color="var(--grid-color)" gap={20} />
           <Controls showInteractive />
         </ReactFlow>
+
+        {nodes.length === 0 || edges.length === 0 ? (
+          <div className="canvas-empty-state">Run generation to render a model-produced architecture graph.</div>
+        ) : null}
 
         {edgeEditor ? (
           <div className="edge-floating-editor" style={{ left: edgeEditor.x, top: edgeEditor.y }}>
