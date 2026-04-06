@@ -964,6 +964,24 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     URL.revokeObjectURL(url);
   };
 
+  const onExportPng = useCallback(async () => {
+    if (!wrapperRef.current) return;
+    try {
+      const dataUrl = await toPng(wrapperRef.current, {
+        cacheBust: true,
+        backgroundColor: theme === "dark" ? "#0f172a" : "#f8fafc",
+      });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "architecture-diagram.png";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      // Ignore export errors in UI.
+    }
+  }, [theme]);
+
   const onImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1011,6 +1029,45 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     } finally {
       event.target.value = "";
     }
+  };
+
+  const selectedNode = graph.nodes.find((node) => node.selected);
+  const selectedEdge = graph.edges.find((edge) => edge.selected);
+
+  const updateSelectedNodeLabel = (label: string) => {
+    if (!selectedNode) return;
+    onCommitLabel(selectedNode.id, label);
+  };
+
+  const updateSelectedNodeKind = (kind: FlowNodeKind) => {
+    if (!selectedNode) return;
+    applyGraphChange((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => {
+        if (node.id !== selectedNode.id) return node;
+        return {
+          ...node,
+          type: toFlowNodeType(kind),
+          data: {
+            ...node.data,
+            kind,
+          },
+          style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : undefined,
+        };
+      }),
+    }));
+  };
+
+  const updateSelectedEdgeType = (value: string) => {
+    if (!selectedEdge) return;
+    const edgeType = normalizeProtocol(value);
+    const lineStyle: EdgeLine = edgeType === "Async" ? "async" : "sync";
+    applyGraphChange((current) => ({
+      ...current,
+      edges: current.edges.map((edge) =>
+        edge.id === selectedEdge.id ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle) : edge
+      ),
+    }));
   };
 
   const rendered = withCallbacks(graph);
