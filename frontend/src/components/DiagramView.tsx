@@ -431,6 +431,7 @@ function createEdge(
     source,
     target,
     type: "smoothstep",
+    className: "arch-edge",
     markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18 },
     data: { edgeType, lineStyle },
     label: edgeType,
@@ -438,7 +439,7 @@ function createEdge(
     labelStyle: visual.labelStyle,
     labelBgStyle: visual.labelBgStyle,
     labelBgBorderRadius: 4,
-    labelBgPadding: [4, 3],
+    labelBgPadding: [8, 4],
     animated: false,
   };
 }
