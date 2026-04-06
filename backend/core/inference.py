@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
 
 import torch
 from peft import PeftModel
@@ -10,85 +9,68 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 _MODEL = None
 _TOKENIZER = None
 _MODEL_DEVICE = None
+_ALLOWED_NODE_TYPES = {"ui", "service", "database", "cache", "queue", "container"}
 
 
-def _limit_sentences(text: str, max_sentences: int = 2) -> str:
-    parts = re.split(r"(?<=[.!?])\s+", text.strip())
-    parts = [p for p in parts if p]
-    if not parts:
-        return ""
-    return " ".join(parts[:max_sentences]).strip()
+def _extract_json_object(raw_text: str) -> dict:
+    start = raw_text.find("{")
+    end = raw_text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("Model output did not contain a JSON object")
+
+    json_slice = raw_text[start : end + 1]
+    try:
+        parsed = json.loads(json_slice)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Model output JSON is invalid: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Model output must be a JSON object")
+    return parsed
 
 
-def _extract_section(text: str, section_name: str, next_sections: tuple[str, ...]) -> str:
-    boundary = "|".join(re.escape(s) for s in next_sections)
-    pattern = rf"{re.escape(section_name)}\s*(.*?)(?={boundary}|$)"
-    matches = re.findall(pattern, text, flags=re.IGNORECASE | re.DOTALL)
-    return matches[0].strip() if matches else ""
+def _validate_architecture(payload: dict) -> dict:
+    nodes = payload.get("nodes")
+    edges = payload.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        raise ValueError("Architecture JSON must contain 'nodes' and 'edges' arrays")
+    if len(nodes) == 0 or len(edges) == 0:
+        raise ValueError("Architecture JSON must include at least one node and one edge")
 
+    normalized_nodes: list[dict[str, str]] = []
+    node_ids: set[str] = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            raise ValueError("Each node must be an object")
+        node_id = node.get("id")
+        node_type = node.get("type")
+        if not isinstance(node_id, str) or not node_id.strip():
+            raise ValueError("Each node must include a non-empty string 'id'")
+        if not isinstance(node_type, str) or node_type not in _ALLOWED_NODE_TYPES:
+            raise ValueError("Each node must include a valid 'type'")
+        normalized_id = node_id.strip()
+        if normalized_id in node_ids:
+            raise ValueError(f"Duplicate node id '{normalized_id}'")
+        node_ids.add(normalized_id)
+        normalized_nodes.append({"id": normalized_id, "type": node_type})
 
-def _sanitize_section(text: str) -> str:
-    cleaned = text.strip()
-    cleaned = re.sub(r"\b(Components:|Data flow:|Architecture type:)\b", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.replace("\n", " ")
+    normalized_edges: list[dict[str, str]] = []
+    for edge in edges:
+        if not isinstance(edge, dict):
+            raise ValueError("Each edge must be an object")
+        source = edge.get("source")
+        target = edge.get("target")
+        label = edge.get("label")
+        if not isinstance(source, str) or not isinstance(target, str):
+            raise ValueError("Each edge must include string 'source' and 'target'")
+        if source not in node_ids or target not in node_ids:
+            raise ValueError("Edge source/target must reference known node ids")
+        normalized_edge = {"source": source, "target": target}
+        if isinstance(label, str) and label.strip():
+            normalized_edge["label"] = label.strip()
+        normalized_edges.append(normalized_edge)
 
-    for marker in ("Human", "JSON", "example", "```", "Assistant:", "User:", "###"):
-        idx = cleaned.find(marker)
-        if idx != -1:
-            cleaned = cleaned[:idx]
-
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:\n\t")
-    cleaned = _limit_sentences(cleaned, max_sentences=2)
-    return cleaned
-
-
-def _clean_structured_output(text: str, architecture: dict, max_words: int = 150) -> str:
-    raw = text.strip()
-
-    components = _extract_section(raw, "Components:", ("Data flow:", "Architecture type:"))
-    data_flow = _extract_section(raw, "Data flow:", ("Architecture type:",))
-    arch_type = _extract_section(raw, "Architecture type:", tuple())
-
-    components_clean = _sanitize_section(components)
-    dataflow_clean = _sanitize_section(data_flow)
-    archtype_clean = _sanitize_section(arch_type)
-
-    if not components_clean:
-        nodes = architecture.get("nodes", []) if isinstance(architecture, dict) else []
-        labels = [
-            n.get("id") or n.get("label") or str(n)
-            if isinstance(n, dict)
-            else str(n)
-            for n in nodes
-        ]
-        labels = [lbl for lbl in labels if lbl]
-        components_clean = (
-            f"Main components are {', '.join(labels)}."
-            if labels
-            else "Main components are frontend, backend, and database."
-        )
-
-    if not dataflow_clean:
-        dataflow_clean = "Frontend communicates with backend, which interacts with database."
-
-    if not archtype_clean:
-        archtype_clean = "Layered architecture."
-
-    components_clean = _limit_sentences(components_clean, max_sentences=2)
-    dataflow_clean = _limit_sentences(dataflow_clean, max_sentences=2)
-    archtype_clean = _limit_sentences(archtype_clean, max_sentences=2)
-
-    final_output = (
-        f"Components: {components_clean}\n\n"
-        f"Data flow: {dataflow_clean}\n\n"
-        f"Architecture type: {archtype_clean}"
-    )
-
-    words = final_output.split()
-    if len(words) > max_words:
-        final_output = " ".join(words[:max_words]).strip()
-
-    return final_output
+    return {"nodes": normalized_nodes, "edges": normalized_edges}
 
 
 def _load_model_once() -> None:
@@ -141,44 +123,51 @@ def preload_model() -> None:
     _load_model_once()
 
 
-def generate_explanation(architecture: dict) -> str:
+def generate_architecture(text: str) -> tuple[dict, str]:
     _load_model_once()
+    clean_text = text.strip()
+    if not clean_text:
+        raise ValueError("Input text is required")
+    print("INPUT:", clean_text)
     print("RUNNING REAL MODEL")
 
-    architecture_json = json.dumps(architecture, ensure_ascii=True, indent=2)
     prompt = f"""
-Explain the following software architecture clearly and concisely.
+You are a system architect.
 
-Architecture:
-{architecture_json}
+Convert this description into a JSON graph.
 
-Explanation:
+STRICT FORMAT:
+{{
+  "nodes": [{{"id": "...", "type": "ui|service|database|cache|queue|container"}}],
+  "edges": [{{"source": "...", "target": "...", "label": "..."}}]
+}}
+
+Description:
+{clean_text}
+
+ONLY return JSON.
 """
 
-    input_ids = _TOKENIZER(prompt, return_tensors="pt").to(_MODEL_DEVICE)
-    input_len = input_ids.input_ids.shape[1]
+    inputs = _TOKENIZER(prompt, return_tensors="pt").to(_MODEL_DEVICE)
 
     with torch.inference_mode():
         outputs = _MODEL.generate(
-            **input_ids,
-            max_new_tokens=150,
-            temperature=0.7,
+            **inputs,
+            max_new_tokens=300,
+            temperature=0.3,
             top_p=0.9,
-            repetition_penalty=1.2,
-            no_repeat_ngram_size=3,
             do_sample=True,
             eos_token_id=_TOKENIZER.eos_token_id,
             pad_token_id=_TOKENIZER.eos_token_id,
         )
 
-    generated_ids = outputs[:, input_len:]
-    generated = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
+    result = _TOKENIZER.decode(outputs[0], skip_special_tokens=True).strip()
+    if result.startswith(prompt):
+        result = result[len(prompt):].strip()
 
-    for prefix in ("Explanation:", "Answer:"):
-        if generated.startswith(prefix):
-            generated = generated[len(prefix):].strip()
+    print("RAW MODEL OUTPUT:", result[:500])
 
-    output = _clean_structured_output(generated, architecture=architecture, max_words=150)
-    print("OUTPUT LENGTH:", len(output))
+    architecture = _validate_architecture(_extract_json_object(result))
+    print("OUTPUT LENGTH:", len(result))
     print("GPU MEMORY:", torch.cuda.memory_allocated() / 1024**2, "MB")
-    return output
+    return architecture, result

@@ -1,31 +1,20 @@
 import { ChangeEvent, DragEvent, useRef, useState } from "react";
 import DiagramView from "./components/DiagramView";
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const API_URL = "http://127.0.0.1:8000/explain";
 
-const defaultJson = {
-  nodes: [
-    { id: "frontend", type: "ui" },
-    { id: "backend", type: "service" },
-    { id: "database", type: "data" },
-  ],
-  edges: [
-    { source: "frontend", target: "backend" },
-    { source: "backend", target: "database" },
-  ],
-};
-
-const defaultText = "3-tier app with frontend, backend, database";
+const defaultText = "A frontend app calls an API service, which writes to postgres and publishes jobs to a queue.";
 
 type ArchitectureNode = {
   id: string;
-  type?: string;
+  type: "ui" | "service" | "database" | "cache" | "queue" | "container";
   [key: string]: unknown;
 };
 
 type ArchitectureEdge = {
   source: string;
   target: string;
+  label?: string;
   [key: string]: unknown;
 };
 
@@ -43,10 +32,9 @@ type EditorCommand = {
 };
 
 function App() {
-  const [mode, setMode] = useState<"text" | "json">("text");
   const [input, setInput] = useState(defaultText);
   const [output, setOutput] = useState("");
-  const [architecture, setArchitecture] = useState<Architecture>(defaultJson);
+  const [architecture, setArchitecture] = useState<Architecture | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [editorCommand, setEditorCommand] = useState<EditorCommand | null>(null);
@@ -65,32 +53,20 @@ function App() {
   const onGenerate = async () => {
     setError("");
     setOutput("");
+    setArchitecture(null);
 
-    let body: Record<string, unknown>;
-    if (mode === "json") {
-      let parsedInput: unknown;
-      try {
-        parsedInput = JSON.parse(input);
-      } catch {
-        setError("Invalid JSON. Please fix the input and try again.");
-        return;
-      }
-      body = { architecture: parsedInput };
-    } else {
-      const text = input.trim();
-      if (!text) {
-        setError("Please enter architecture text.");
-        return;
-      }
-      body = { text };
+    const text = input.trim();
+    if (!text) {
+      setError("Please enter architecture text.");
+      return;
     }
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/explain`, {
+      const response = await fetch(API_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ text }),
       });
 
       if (!response.ok) {
@@ -105,9 +81,9 @@ function App() {
         throw new Error(backendMessage);
       }
 
-      const data = (await response.json()) as { explanation?: string; architecture?: unknown };
+      const data = (await response.json()) as { architecture?: unknown; raw_model_output?: string };
       console.log("API RESPONSE:", data);
-      setOutput(data.explanation ?? "No explanation returned.");
+      setOutput(data.raw_model_output ?? "");
 
       const arch = data.architecture as { nodes?: unknown; edges?: unknown } | undefined;
       const isValid =
@@ -121,8 +97,7 @@ function App() {
         setArchitecture(data.architecture as Architecture);
         sendEditorCommand("reset");
       } else {
-        console.error("INVALID ARCH:", data);
-        setError("Backend response did not include a valid architecture graph.");
+        throw new Error("Backend response did not include a valid architecture graph.");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
@@ -136,32 +111,9 @@ function App() {
     <main className="editor-shell">
       <aside className="editor-sidebar">
         <h1>ArchitectAI</h1>
-        <p className="sub">Generate an initial architecture and then edit it directly on the canvas.</p>
+        <p className="sub">Enter text. Backend runs the model and returns a graph JSON.</p>
 
-        <div className="mode-toggle">
-          <button
-            className={`mode-btn ${mode === "text" ? "active" : ""}`}
-            type="button"
-            onClick={() => {
-              setMode("text");
-              setInput(defaultText);
-            }}
-          >
-            Text Mode
-          </button>
-          <button
-            className={`mode-btn ${mode === "json" ? "active" : ""}`}
-            type="button"
-            onClick={() => {
-              setMode("json");
-              setInput(JSON.stringify(defaultJson, null, 2));
-            }}
-          >
-            JSON Mode
-          </button>
-        </div>
-
-        <label htmlFor="architecture-input">{mode === "json" ? "Architecture JSON" : "Architecture Description"}</label>
+        <label htmlFor="architecture-input">Architecture Description</label>
         <textarea
           id="architecture-input"
           value={input}
@@ -193,13 +145,17 @@ function App() {
         {error ? <p className="error">{error}</p> : null}
 
         <div className="output">
-          <h2>Explanation</h2>
-          <pre>{output || "No explanation yet."}</pre>
+          <h2>Raw Model Output</h2>
+          <pre>{output || "No output yet."}</pre>
         </div>
       </aside>
 
       <section className="editor-canvas-panel">
-        <DiagramView architecture={architecture} command={editorCommand} />
+        {architecture ? (
+          <DiagramView architecture={architecture} command={editorCommand} />
+        ) : (
+          <div className="empty-state">Run generation to render a model-produced architecture graph.</div>
+        )}
       </section>
     </main>
   );
