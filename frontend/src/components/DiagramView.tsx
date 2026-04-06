@@ -1310,6 +1310,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
         <input ref={importInputRef} type="file" accept="application/json" className="hidden-input" onChange={onImportFileChange} />
 
         <ReactFlow
+          className={`diagram-flow mode-${toolMode} ${isDraggingNode ? "is-dragging" : ""}`}
           nodes={rendered.nodes}
           edges={rendered.edges}
           onNodesChange={onNodesChange}
@@ -1317,11 +1318,15 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           onConnect={onConnect}
           onNodeClick={onNodeClick}
           onEdgeClick={onEdgeClick}
+          onEdgeContextMenu={onEdgeContextMenu}
+          onNodeDragStart={onNodeDragStart}
           onNodeDragStop={onNodeDragStop}
+          onPaneClick={() => setEdgeEditor(null)}
           nodeTypes={nodeTypes}
           fitView
-          nodesDraggable={toolMode !== "pan"}
-          panOnDrag={toolMode === "pan" || toolMode === "select"}
+          nodesDraggable={toolMode === "select"}
+          nodesConnectable={toolMode === "connect"}
+          panOnDrag={toolMode !== "connect"}
           zoomOnScroll
           zoomOnPinch
           zoomOnDoubleClick
@@ -1329,14 +1334,35 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           deleteKeyCode={null}
           connectionLineType={ConnectionLineType.SmoothStep}
           snapToGrid
-          snapGrid={[24, 24]}
+          snapGrid={[20, 20]}
           minZoom={0.35}
           maxZoom={1.7}
           fitViewOptions={{ padding: 0.2 }}
         >
-          <Background color="#d1d5db" gap={24} />
+          <Background color="var(--grid-color)" gap={20} />
           <Controls showInteractive />
         </ReactFlow>
+
+        {edgeEditor ? (
+          <div className="edge-floating-editor" style={{ left: edgeEditor.x, top: edgeEditor.y }}>
+            <input
+              className="edge-floating-input"
+              value={edgeEditor.value}
+              onChange={(event) => setEdgeEditor((current) => (current ? { ...current, value: event.target.value } : current))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  commitEdgeEditor();
+                }
+                if (event.key === "Escape") {
+                  setEdgeEditor(null);
+                }
+              }}
+              onBlur={commitEdgeEditor}
+              autoFocus
+            />
+            <button type="button" className="edge-floating-delete" onMouseDown={(event) => event.preventDefault()} onClick={deleteEdgeEditorTarget}>Delete</button>
+          </div>
+        ) : null}
       </div>
 
       <aside className="property-panel">
