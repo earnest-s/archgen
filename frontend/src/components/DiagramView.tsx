@@ -1,6 +1,6 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
-import { FiBox, FiDatabase, FiHardDrive, FiLayers, FiMonitor, FiMoon, FiMove, FiMousePointer, FiPackage, FiPlusCircle, FiServer, FiSun, FiTrash2 } from "react-icons/fi";
+import { FiBox, FiDatabase, FiHardDrive, FiLayers, FiMonitor, FiMoon, FiMousePointer, FiPackage, FiPlusCircle, FiServer, FiSun } from "react-icons/fi";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -70,7 +70,7 @@ type DiagramViewProps = {
 type FlowNodeKind = "ui" | "service" | "database" | "cache" | "container" | "gateway" | "queue";
 type EdgeProtocol = "request" | "HTTP" | "gRPC" | "Async" | "Cache" | "DB Query";
 type EdgeLine = "sync" | "async";
-type ToolMode = "select" | "connect" | "delete" | "pan";
+type ToolMode = "select" | "connect";
 
 type NodeData = {
   label: string;
@@ -737,7 +737,6 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   const historyRef = useRef<GraphState[]>([]);
   const futureRef = useRef<GraphState[]>([]);
   const graphRef = useRef<GraphState>(initialGraph);
-  const nodeCounterRef = useRef(1);
   const hasInitializedRef = useRef(false);
 
   useEffect(() => {
@@ -855,7 +854,6 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     hasInitializedRef.current = true;
     historyRef.current = [];
     futureRef.current = [];
-    nodeCounterRef.current = 1;
     graphRef.current = initialGraph;
     setNodes(initialGraph.nodes);
     setEdges(initialGraph.edges);
@@ -979,7 +977,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
 
   const onConnect = useCallback(
     (connection: Connection) => {
-      if (toolMode === "delete" || toolMode === "pan") return;
+      if (toolMode !== "connect") return;
       applyGraphChange((current) => {
         if (!connection.source || !connection.target) return current;
         const sourceNode = current.nodes.find((n) => n.id === connection.source);
@@ -1001,14 +999,6 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
 
   const onEdgeClick = useCallback(
     (event: React.MouseEvent, edge: Edge<EdgeData>) => {
-      if (toolMode === "delete") {
-        applyGraphChange((current) => ({
-          ...current,
-          edges: current.edges.filter((item) => item.id !== edge.id),
-        }));
-        return;
-      }
-
       const bounds = wrapperRef.current?.getBoundingClientRect();
       const x = bounds ? event.clientX - bounds.left : 16;
       const y = bounds ? event.clientY - bounds.top : 16;
@@ -1035,14 +1025,10 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   );
 
   const onNodeClick = useCallback(
-    (_event: React.MouseEvent, node: Node<NodeData>) => {
-      if (toolMode !== "delete") return;
-      applyGraphChange((current) => ({
-        nodes: current.nodes.filter((item) => item.id !== node.id),
-        edges: current.edges.filter((edge) => edge.source !== node.id && edge.target !== node.id),
-      }));
+    () => {
+      setEdgeEditor(null);
     },
-    [applyGraphChange, toolMode]
+    []
   );
 
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
@@ -1300,8 +1286,6 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           <div className="menu-group">
             <button type="button" className={`menu-btn icon-btn ${toolMode === "select" ? "active" : ""}`} title="Select" onClick={() => setToolMode("select")}><FiMousePointer /></button>
             <button type="button" className={`menu-btn icon-btn ${toolMode === "connect" ? "active" : ""}`} title="Connect" onClick={() => setToolMode("connect")}><FiPlusCircle /></button>
-            <button type="button" className={`menu-btn icon-btn ${toolMode === "delete" ? "active" : ""}`} title="Delete" onClick={() => setToolMode("delete")}><FiTrash2 /></button>
-            <button type="button" className={`menu-btn icon-btn ${toolMode === "pan" ? "active" : ""}`} title="Pan" onClick={() => setToolMode("pan")}><FiMove /></button>
             <button type="button" className="menu-btn icon-btn" title="Light / Dark" onClick={onToggleTheme}>{theme === "dark" ? <FiSun /> : <FiMoon />}</button>
           </div>
         </div>
@@ -1325,7 +1309,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           fitView
           nodesDraggable={toolMode === "select"}
           nodesConnectable={toolMode === "connect"}
-          panOnDrag={toolMode !== "connect"}
+          panOnDrag={toolMode === "select"}
           zoomOnScroll
           zoomOnPinch
           zoomOnDoubleClick
