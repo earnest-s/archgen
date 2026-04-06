@@ -133,6 +133,7 @@ function normalizeLabel(value: string): string {
 
 function detectKindFromLabel(label: string, fallbackType?: string): FlowNodeKind {
   const normalized = normalizeLabel(label);
+  const normalizedType = normalizeLabel(fallbackType ?? "");
   if (normalized.includes("docker") || normalized.includes("container")) return "container";
   if (
     normalized.includes("postgres") ||
@@ -148,9 +149,54 @@ function detectKindFromLabel(label: string, fallbackType?: string): FlowNodeKind
   if (normalized.includes("queue") || normalized.includes("rabbitmq") || normalized.includes("kafka")) return "queue";
   if (normalized.includes("frontend") || normalized.includes("ui") || normalized.includes("client")) return "ui";
 
-  if (fallbackType === "ui") return "ui";
-  if (fallbackType === "database") return "database";
-  if (fallbackType === "data") return "database";
+  if (
+    normalizedType === "ui" ||
+    normalizedType.includes("frontend") ||
+    normalizedType.includes("client") ||
+    normalizedType.includes("web")
+  ) {
+    return "ui";
+  }
+  if (
+    normalizedType === "database" ||
+    normalizedType === "data" ||
+    normalizedType.includes("db") ||
+    normalizedType.includes("database") ||
+    normalizedType.includes("postgres") ||
+    normalizedType.includes("mysql") ||
+    normalizedType.includes("mongo")
+  ) {
+    return "database";
+  }
+  if (normalizedType.includes("cache") || normalizedType.includes("redis") || normalizedType.includes("memcached")) {
+    return "cache";
+  }
+  if (
+    normalizedType.includes("queue") ||
+    normalizedType.includes("broker") ||
+    normalizedType.includes("kafka") ||
+    normalizedType.includes("rabbit") ||
+    normalizedType.includes("sqs")
+  ) {
+    return "queue";
+  }
+  if (
+    normalizedType.includes("gateway") ||
+    normalizedType.includes("proxy") ||
+    normalizedType.includes("ingress") ||
+    normalizedType.includes("nginx")
+  ) {
+    return "gateway";
+  }
+  if (
+    normalizedType.includes("container") ||
+    normalizedType.includes("docker") ||
+    normalizedType.includes("k8s") ||
+    normalizedType.includes("kubernetes") ||
+    normalizedType.includes("pod")
+  ) {
+    return "container";
+  }
   return "service";
 }
 
