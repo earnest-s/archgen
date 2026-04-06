@@ -1376,7 +1376,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             <select className="prop-input" value={selectedNode.data.kind} onChange={(event) => updateSelectedNodeKind(event.target.value as FlowNodeKind)}>
               <option value="ui">ui</option>
               <option value="service">service</option>
-              <option value="database">database</option>
+              <option value="database">db</option>
               <option value="cache">cache</option>
               <option value="queue">queue</option>
               <option value="container">container</option>
@@ -1391,6 +1391,8 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             <h4>Edge</h4>
             <label>Label / Type</label>
             <input className="prop-input" value={String(selectedEdge.label ?? selectedEdge.data?.edgeType ?? "HTTP")} onChange={(event) => updateSelectedEdgeType(event.target.value)} />
+            <label>Path</label>
+            <div className="prop-path">{selectedEdge.source} -&gt; {selectedEdge.target}</div>
           </div>
         ) : null}
 
