@@ -13,20 +13,15 @@ _ALLOWED_NODE_TYPES = {"ui", "service", "database", "cache", "queue", "container
 
 
 def _extract_json_object(raw_text: str) -> dict:
-    start = raw_text.find("{")
-    end = raw_text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("Model output did not contain a JSON object")
-
-    json_slice = raw_text[start : end + 1]
-    try:
-        parsed = json.loads(json_slice)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Model output JSON is invalid: {exc}") from exc
-
-    if not isinstance(parsed, dict):
-        raise ValueError("Model output must be a JSON object")
-    return parsed
+    decoder = json.JSONDecoder()
+    for start in (idx for idx, ch in enumerate(raw_text) if ch == "{"):
+        try:
+            parsed, _ = decoder.raw_decode(raw_text[start:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    raise ValueError("Model output did not contain a valid JSON object")
 
 
 def _validate_architecture(payload: dict) -> dict:
