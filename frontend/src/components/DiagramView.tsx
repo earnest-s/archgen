@@ -814,6 +814,43 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     [applyGraphChange, toolMode]
   );
 
+  const onEdgeClick = useCallback(
+    (_event: React.MouseEvent, edge: Edge<EdgeData>) => {
+      if (toolMode === "delete") {
+        applyGraphChange((current) => ({
+          ...current,
+          edges: current.edges.filter((item) => item.id !== edge.id),
+        }));
+        return;
+      }
+
+      const nextLabel = window.prompt("Edit edge label", String(edge.label ?? edge.data?.edgeType ?? "HTTP"));
+      if (!nextLabel || !nextLabel.trim()) return;
+
+      const nextType = normalizeProtocol(nextLabel);
+      const nextLineStyle: EdgeLine = nextType === "Async" ? "async" : "sync";
+
+      applyGraphChange((current) => ({
+        ...current,
+        edges: current.edges.map((item) =>
+          item.id === edge.id ? createEdge(item.id, item.source, item.target, nextType, nextLineStyle) : item
+        ),
+      }));
+    },
+    [applyGraphChange, toolMode]
+  );
+
+  const onNodeClick = useCallback(
+    (_event: React.MouseEvent, node: Node<NodeData>) => {
+      if (toolMode !== "delete") return;
+      applyGraphChange((current) => ({
+        nodes: current.nodes.filter((item) => item.id !== node.id),
+        edges: current.edges.filter((edge) => edge.source !== node.id && edge.target !== node.id),
+      }));
+    },
+    [applyGraphChange, toolMode]
+  );
+
   const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
