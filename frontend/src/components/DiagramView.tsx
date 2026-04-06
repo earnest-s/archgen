@@ -1258,7 +1258,27 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           ...node,
           data: {
             ...node.data,
-            icon: icon === "" ? undefined : icon,
+            icon: icon === "auto" ? undefined : icon,
+          },
+        };
+      }),
+    }));
+  };
+
+  const updateSelectedNodeStyle = (key: "background" | "borderColor" | "textColor", value: string) => {
+    if (!selectedNode) return;
+    applyGraphChange((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) => {
+        if (node.id !== selectedNode.id) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            style: {
+              ...(node.data.style || {}),
+              [key]: value,
+            },
           },
         };
       }),
@@ -1274,6 +1294,23 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
       edges: current.edges.map((edge) =>
         edge.id === selectedEdge.id ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle, edge.data?.style) : edge
       ),
+    }));
+  };
+
+  const updateSelectedEdgeStyle = (key: "stroke" | "width" | "dashed", value: string | number | boolean) => {
+    if (!selectedEdge) return;
+    applyGraphChange((current) => ({
+      ...current,
+      edges: current.edges.map((edge) => {
+        if (edge.id !== selectedEdge.id) return edge;
+        const nextStyle = {
+          ...(edge.data?.style || {}),
+          [key]: value,
+        } as EdgeData["style"];
+        const nextType = edge.data?.edgeType ?? "request";
+        const nextLineStyle = edge.data?.lineStyle ?? (nextType === "Async" ? "async" : "sync");
+        return createEdge(edge.id, edge.source, edge.target, nextType, nextLineStyle, nextStyle);
+      }),
     }));
   };
 
@@ -1409,14 +1446,41 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
               <option value="container">container</option>
             </select>
             <label>Icon</label>
-            <select className="prop-input" value={selectedNode.data.icon ?? ""} onChange={(event) => updateSelectedNodeIcon(event.target.value)}>
-              <option value="">auto</option>
+            <select className="prop-input" value={selectedNode.data.icon ?? "auto"} onChange={(event) => updateSelectedNodeIcon(event.target.value)}>
               {ICON_OPTIONS.map((iconName) => (
                 <option key={iconName} value={iconName}>{iconName}</option>
               ))}
             </select>
+            <label>Background</label>
+            <input
+              className="prop-input prop-color-input"
+              type="color"
+              value={selectedNode.data.style?.background || "#ffffff"}
+              onChange={(event) => updateSelectedNodeStyle("background", event.target.value)}
+            />
+            <label>Border</label>
+            <input
+              className="prop-input prop-color-input"
+              type="color"
+              value={selectedNode.data.style?.borderColor || "#e2e8f0"}
+              onChange={(event) => updateSelectedNodeStyle("borderColor", event.target.value)}
+            />
+            <label>Text</label>
+            <input
+              className="prop-input prop-color-input"
+              type="color"
+              value={selectedNode.data.style?.textColor || "#0f172a"}
+              onChange={(event) => updateSelectedNodeStyle("textColor", event.target.value)}
+            />
             <label>Color Preview</label>
-            <div className={`prop-color-preview ${nodeThemeClass(selectedNode.data.kind)}`} />
+            <div
+              className="prop-color-preview"
+              style={{
+                background: selectedNode.data.style?.background || "#ffffff",
+                borderColor: selectedNode.data.style?.borderColor || "#e2e8f0",
+                color: selectedNode.data.style?.textColor || "#0f172a",
+              }}
+            />
           </div>
         ) : null}
 
@@ -1425,6 +1489,31 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             <h4>Edge</h4>
             <label>Label / Type</label>
             <input className="prop-input" value={String(selectedEdge.label ?? selectedEdge.data?.edgeType ?? "HTTP")} onChange={(event) => updateSelectedEdgeType(event.target.value)} />
+            <label>Stroke</label>
+            <input
+              className="prop-input prop-color-input"
+              type="color"
+              value={selectedEdge.data?.style?.stroke || "#64748b"}
+              onChange={(event) => updateSelectedEdgeStyle("stroke", event.target.value)}
+            />
+            <label>Width</label>
+            <input
+              className="prop-input"
+              type="range"
+              min={1}
+              max={5}
+              step={1}
+              value={selectedEdge.data?.style?.width ?? 2}
+              onChange={(event) => updateSelectedEdgeStyle("width", Number(event.target.value))}
+            />
+            <label className="prop-checkbox-row">
+              <input
+                type="checkbox"
+                checked={Boolean(selectedEdge.data?.style?.dashed)}
+                onChange={(event) => updateSelectedEdgeStyle("dashed", event.target.checked)}
+              />
+              Dashed
+            </label>
             <label>Path</label>
             <div className="prop-path">{selectedEdge.source} -&gt; {selectedEdge.target}</div>
           </div>
