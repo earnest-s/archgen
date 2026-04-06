@@ -1,4 +1,6 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toPng } from "html-to-image";
+import { FiBox, FiMoon, FiMove, FiMousePointer, FiPlusCircle, FiSun, FiTrash2 } from "react-icons/fi";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -18,6 +20,18 @@ import ReactFlow, {
   ReactFlowInstance,
   useReactFlow,
 } from "reactflow";
+import {
+  siApachekafka,
+  siDocker,
+  siFastapi,
+  siMongodb,
+  siMysql,
+  siNodedotjs,
+  siNginx,
+  siPostgresql,
+  siReact,
+  siRedis,
+} from "simple-icons";
 import "reactflow/dist/style.css";
 
 type ArchitectureNode = {
@@ -47,11 +61,14 @@ type EditorCommand = {
 type DiagramViewProps = {
   architecture: Architecture;
   command?: EditorCommand | null;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 };
 
 type FlowNodeKind = "ui" | "service" | "database" | "cache" | "container" | "gateway" | "queue";
-type EdgeProtocol = "request" | "HTTP" | "gRPC" | "Queue" | "DB Query";
+type EdgeProtocol = "request" | "HTTP" | "gRPC" | "Async" | "Cache" | "DB Query";
 type EdgeLine = "sync" | "async";
+type ToolMode = "select" | "connect" | "delete" | "pan";
 
 type NodeData = {
   label: string;
