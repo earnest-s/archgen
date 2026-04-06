@@ -4,7 +4,7 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.inference import generate_architecture, preload_model
+from backend.core.inference import generate_architecture, preload_model, run_startup_smoke_test
 
 app = FastAPI()
 
@@ -27,7 +27,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def preload_inference_model() -> None:
     preload_model()
-    _ = generate_architecture("A frontend web client calls an API service which writes to a postgres database.", deterministic=True)
+    run_startup_smoke_test()
     print("MODEL READY")
 
 
