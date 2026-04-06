@@ -728,18 +728,21 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const initialGraph = useMemo(() => buildInitialGraph(architecture), [architecture]);
-  const [graph, setGraph] = useState<GraphState>(initialGraph);
+  const [nodes, setNodes] = useNodesState<NodeData>(initialGraph.nodes);
+  const [edges, setEdges] = useEdgesState<EdgeData>(initialGraph.edges);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [toolMode, setToolMode] = useState<ToolMode>("select");
+  const [edgeEditor, setEdgeEditor] = useState<{ edgeId: string; x: number; y: number; value: string } | null>(null);
+  const [isDraggingNode, setIsDraggingNode] = useState(false);
   const historyRef = useRef<GraphState[]>([]);
   const futureRef = useRef<GraphState[]>([]);
-  const graphRef = useRef(graph);
+  const graphRef = useRef<GraphState>(initialGraph);
   const nodeCounterRef = useRef(1);
   const hasInitializedRef = useRef(false);
 
   useEffect(() => {
-    graphRef.current = graph;
-  }, [graph]);
+    graphRef.current = { nodes, edges };
+  }, [nodes, edges]);
 
   const onStartEdit = useCallback((nodeId: string) => {
     setEditingNodeId(nodeId);
