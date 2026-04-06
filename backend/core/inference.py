@@ -17,6 +17,25 @@ _NODE_TYPE_ALIASES = {
 }
 
 
+def _derive_type_from_id(node_id: str) -> str | None:
+    normalized = node_id.strip().lower()
+    if normalized in _ALLOWED_NODE_TYPES:
+        return normalized
+    if "cache" in normalized or "redis" in normalized:
+        return "cache"
+    if "queue" in normalized or "kafka" in normalized or "rabbit" in normalized:
+        return "queue"
+    if "db" in normalized or "postgres" in normalized or "database" in normalized or "mysql" in normalized:
+        return "database"
+    if "front" in normalized or "ui" in normalized or "client" in normalized:
+        return "ui"
+    if "container" in normalized or "docker" in normalized:
+        return "container"
+    if "api" in normalized or "service" in normalized or "backend" in normalized:
+        return "service"
+    return None
+
+
 def _extract_json_object(raw_text: str) -> dict:
     decoder = json.JSONDecoder()
     for start in (idx for idx, ch in enumerate(raw_text) if ch == "{"):
@@ -54,12 +73,24 @@ def _validate_architecture(payload: dict) -> dict:
 
         if not isinstance(node_id, str) or not node_id.strip():
             raise ValueError("Each node must include a non-empty string 'id'")
-        if not isinstance(node_type, str):
-            raise ValueError("Each node must include a valid 'type'")
-        normalized_type = _NODE_TYPE_ALIASES.get(node_type.strip().lower(), node_type.strip().lower())
+        normalized_id = node_id.strip()
+
+        if isinstance(node_type, str):
+            candidate_type = _NODE_TYPE_ALIASES.get(node_type.strip().lower(), node_type.strip().lower())
+            if candidate_type == "component":
+                inferred = _derive_type_from_id(normalized_id)
+                if inferred is None:
+                    raise ValueError("Each node must include a valid 'type'")
+                candidate_type = inferred
+        else:
+            inferred = _derive_type_from_id(normalized_id)
+            if inferred is None:
+                raise ValueError("Each node must include a valid 'type'")
+            candidate_type = inferred
+
+        normalized_type = candidate_type
         if normalized_type not in _ALLOWED_NODE_TYPES:
             raise ValueError("Each node must include a valid 'type'")
-        normalized_id = node_id.strip()
         if normalized_id in node_ids:
             raise ValueError(f"Duplicate node id '{normalized_id}'")
         node_ids.add(normalized_id)
@@ -72,9 +103,9 @@ def _validate_architecture(payload: dict) -> dict:
         label = None
 
         if isinstance(edge, dict):
-            source = edge.get("source")
-            target = edge.get("target")
-            label = edge.get("label")
+            source = edge.get("source") if edge.get("source") is not None else edge.get("from")
+            target = edge.get("target") if edge.get("target") is not None else edge.get("to")
+            label = edge.get("label") if edge.get("label") is not None else edge.get("protocol")
         elif isinstance(edge, list) and len(edge) >= 2:
             source = edge[0]
             target = edge[1]
