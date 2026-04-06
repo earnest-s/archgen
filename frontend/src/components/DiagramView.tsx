@@ -880,11 +880,6 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   }, [nodes, reactFlow]);
 
   useEffect(() => {
-    console.log("NODES:", nodes);
-    console.log("EDGES:", edges);
-  }, [nodes, edges]);
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
