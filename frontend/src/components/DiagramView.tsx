@@ -422,7 +422,7 @@ async function applyDagreLayout(nodes: Node<NodeData>[], edges: Edge<EdgeData>[]
     };
 
     const graph = new dagre.graphlib.Graph();
-    graph.setGraph({ rankdir: "TB", ranksep: 90, nodesep: 55, marginx: 20, marginy: 20 });
+    graph.setGraph({ rankdir: "TB", ranksep: 120, nodesep: 80, marginx: 24, marginy: 24 });
     graph.setDefaultEdgeLabel(() => ({}));
 
     nodes.forEach((node) => {
@@ -680,6 +680,13 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   }, [architecture, command, applyAutoLayout, applyGraphChange]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      reactFlow.fitView({ padding: 0.2, duration: 250 });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [graph.nodes, graph.edges, reactFlow]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
@@ -912,62 +919,6 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
     }
   };
 
-  const selectedNode = graph.nodes.find((node) => node.selected);
-  const selectedEdge = graph.edges.find((edge) => edge.selected);
-
-  const updateSelectedNodeLabel = (label: string) => {
-    if (!selectedNode) return;
-    onCommitLabel(selectedNode.id, label);
-  };
-
-  const updateSelectedNodeKind = (kind: FlowNodeKind) => {
-    if (!selectedNode) return;
-    applyGraphChange((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => {
-        if (node.id !== selectedNode.id) return node;
-        return {
-          ...node,
-          type: toFlowNodeType(kind),
-          data: {
-            ...node.data,
-            kind,
-            label: node.data.label,
-          },
-          style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : undefined,
-        };
-      }),
-    }));
-  };
-
-  const deleteSelectedNode = () => {
-    if (!selectedNode) return;
-    applyGraphChange((current) => {
-      const nodes = current.nodes.filter((node) => node.id !== selectedNode.id);
-      const edges = current.edges.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id);
-      return { nodes, edges };
-    });
-  };
-
-  const updateSelectedEdge = (edgeType: EdgeProtocol, lineStyle: EdgeLine) => {
-    if (!selectedEdge) return;
-    applyGraphChange((current) => ({
-      ...current,
-      edges: current.edges.map((edge) => {
-        if (edge.id !== selectedEdge.id) return edge;
-        return createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle);
-      }),
-    }));
-  };
-
-  const deleteSelectedEdge = () => {
-    if (!selectedEdge) return;
-    applyGraphChange((current) => ({
-      ...current,
-      edges: current.edges.filter((edge) => edge.id !== selectedEdge.id),
-    }));
-  };
-
   const rendered = withCallbacks(graph);
 
   return (
@@ -1016,75 +967,6 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
           <Controls showInteractive />
         </ReactFlow>
       </div>
-
-      <aside className="property-panel">
-        <h3>Properties</h3>
-
-        {selectedNode ? (
-          <div className="prop-block">
-            <h4>Node</h4>
-            <label>Label</label>
-            <input
-              value={selectedNode.data.label}
-              onChange={(event) => updateSelectedNodeLabel(event.target.value)}
-              className="prop-input"
-            />
-            <label>Type</label>
-            <select
-              className="prop-input"
-              value={selectedNode.data.kind}
-              onChange={(event) => updateSelectedNodeKind(event.target.value as FlowNodeKind)}
-            >
-              <option value="ui">ui</option>
-              <option value="service">service</option>
-              <option value="database">database</option>
-              <option value="cache">cache</option>
-              <option value="queue">queue</option>
-              <option value="gateway">gateway</option>
-              <option value="container">container</option>
-            </select>
-            <label>Icon</label>
-            <div className="prop-icon-row">
-              {getIconUrl(selectedNode.data.label) ? (
-                <img src={getIconUrl(selectedNode.data.label) ?? ""} width={18} height={18} className="arch-node-logo" alt="icon" />
-              ) : (
-                <span className="prop-fallback">Fallback</span>
-              )}
-            </div>
-            <button type="button" className="prop-delete" onClick={deleteSelectedNode}>Delete Node</button>
-          </div>
-        ) : null}
-
-        {selectedEdge ? (
-          <div className="prop-block">
-            <h4>Edge</h4>
-            <label>Type</label>
-            <select
-              className="prop-input"
-              value={selectedEdge.data?.edgeType ?? "request"}
-              onChange={(event) => updateSelectedEdge(normalizeProtocol(event.target.value), selectedEdge.data?.lineStyle ?? "sync")}
-            >
-              <option value="request">request</option>
-              <option value="HTTP">HTTP</option>
-              <option value="gRPC">gRPC</option>
-              <option value="Queue">Queue</option>
-              <option value="DB Query">DB Query</option>
-            </select>
-            <label>Line Style</label>
-            <select
-              className="prop-input"
-              value={selectedEdge.data?.lineStyle ?? "sync"}
-              onChange={(event) => updateSelectedEdge(selectedEdge.data?.edgeType ?? "request", event.target.value as EdgeLine)}
-            >
-              <option value="sync">solid</option>
-              <option value="async">dashed</option>
-            </select>
-            <button type="button" className="prop-delete" onClick={deleteSelectedEdge}>Delete Edge</button>
-          </div>
-        ) : null}
-
-        {!selectedNode && !selectedEdge ? <p className="prop-empty">Select a node or edge to edit properties.</p> : null}
-      </aside>
     </div>
   );
 }
