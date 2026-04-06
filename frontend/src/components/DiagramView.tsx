@@ -1,6 +1,6 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
-import { FiBox, FiDatabase, FiGlobe, FiLayers, FiMoon, FiMousePointer, FiPlusCircle, FiServer, FiSun, FiZap } from "react-icons/fi";
+import { FiMoon, FiMousePointer, FiPlusCircle, FiSun } from "react-icons/fi";
 import { Box, Database, GitBranch, Monitor, Server, Zap } from "lucide-react";
 import ReactFlow, {
   applyEdgeChanges,
@@ -230,16 +230,6 @@ function toCanonicalCategory(kind: FlowNodeKind): "ui" | "service" | "database" 
 function categoryForKind(kind: FlowNodeKind): "ui" | "service" | "database" | "cache" | "queue" {
   if (kind === "queue") return "queue";
   return toCanonicalCategory(kind);
-}
-
-function nodeThemeClass(kind: FlowNodeKind): string {
-  if (kind === "ui") return "arch-node-ui";
-  if (kind === "database") return "arch-node-database";
-  if (kind === "cache") return "arch-node-cache";
-  if (kind === "container") return "arch-node-container";
-  if (kind === "gateway") return "arch-node-gateway";
-  if (kind === "queue") return "arch-node-queue";
-  return "arch-node-service";
 }
 
 function getProtocolVisual(_edgeType: EdgeProtocol, lineStyle: EdgeLine): {
