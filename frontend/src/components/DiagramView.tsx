@@ -1202,7 +1202,10 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             if (!nodeSet.has(edge.source) || !nodeSet.has(edge.target)) return null;
             const edgeType = normalizeProtocol(typeof edge.data?.edgeType === "string" ? edge.data.edgeType : "request");
             const lineStyle: EdgeLine = edgeType === "Async" ? "async" : "sync";
-            return createEdge(`i${index + 1}`, edge.source, edge.target, edgeType, lineStyle);
+            const style = typeof (edge as { data?: { style?: unknown } }).data?.style === "object" && (edge as { data?: { style?: unknown } }).data?.style !== null
+              ? (edge as { data?: { style?: { stroke?: string; width?: number; dashed?: boolean } } }).data?.style
+              : undefined;
+            return createEdge(`i${index + 1}`, edge.source, edge.target, edgeType, lineStyle, style);
           })
           .filter((e): e is Edge<EdgeData> => e !== null)
       );
@@ -1269,7 +1272,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     applyGraphChange((current) => ({
       ...current,
       edges: current.edges.map((edge) =>
-        edge.id === selectedEdge.id ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle) : edge
+        edge.id === selectedEdge.id ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle, edge.data?.style) : edge
       ),
     }));
   };
@@ -1286,7 +1289,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     applyGraphChange((current) => ({
       ...current,
       edges: current.edges.map((edge) =>
-        edge.id === edgeEditor.edgeId ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle) : edge
+        edge.id === edgeEditor.edgeId ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle, edge.data?.style) : edge
       ),
     }));
     setEdgeEditor(null);
