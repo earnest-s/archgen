@@ -63,11 +63,18 @@ function App() {
 
     setLoading(true);
     try {
-      const response = await fetch(API_URL, {
+      const requestInit: RequestInit = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
-      });
+      };
+
+      let response: Response;
+      try {
+        response = await fetch(API_URL, requestInit);
+      } catch {
+        response = await fetch(API_URL, requestInit);
+      }
 
       if (!response.ok) {
         let backendMessage = "Request failed.";
