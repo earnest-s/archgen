@@ -755,33 +755,36 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   const onCommitLabel = useCallback((nodeId: string, label: string) => {
     const clean = label.trim() || nodeId;
     setEditingNodeId(null);
-    setGraph((current) => {
-      historyRef.current.push(cloneGraphState(current));
-      if (historyRef.current.length > 50) historyRef.current.shift();
-      futureRef.current = [];
+    const current = graphRef.current;
+    historyRef.current.push(cloneGraphState(current));
+    if (historyRef.current.length > 50) historyRef.current.shift();
+    futureRef.current = [];
 
-      return {
-        ...current,
-        nodes: current.nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          const kind = detectKindFromLabel(clean, node.type);
-          return {
-            ...node,
-            type: toFlowNodeType(kind),
-            data: {
-              ...node.data,
-              label: clean,
-              kind,
-              editing: false,
-              onStartEdit,
-              onCommitLabel,
-            },
-            style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : node.style,
-          };
-        }),
-      };
-    });
-  }, [onStartEdit]);
+    const next: GraphState = {
+      ...current,
+      nodes: current.nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        const kind = detectKindFromLabel(clean, node.type);
+        return {
+          ...node,
+          type: toFlowNodeType(kind),
+          data: {
+            ...node.data,
+            label: clean,
+            kind,
+            editing: false,
+            onStartEdit,
+            onCommitLabel,
+          },
+          style: kind === "container" ? { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT } : node.style,
+        };
+      }),
+    };
+
+    graphRef.current = next;
+    setNodes(next.nodes);
+    setEdges(next.edges);
+  }, [onStartEdit, setEdges, setNodes]);
 
   const withCallbacks = useCallback(
     (state: GraphState): GraphState => ({
@@ -802,41 +805,47 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
   const applyGraphChange = useCallback(
     (updater: (current: GraphState) => GraphState, options?: { recordHistory?: boolean }) => {
       const shouldRecord = options?.recordHistory ?? true;
-      setGraph((current) => {
-        if (shouldRecord) {
-          historyRef.current.push(cloneGraphState(current));
-          if (historyRef.current.length > 50) historyRef.current.shift();
-          futureRef.current = [];
-        }
-        return updater(current);
-      });
+      const current = graphRef.current;
+      if (shouldRecord) {
+        historyRef.current.push(cloneGraphState(current));
+        if (historyRef.current.length > 50) historyRef.current.shift();
+        futureRef.current = [];
+      }
+      const next = updater(current);
+      graphRef.current = next;
+      setNodes(next.nodes);
+      setEdges(next.edges);
     },
-    []
+    [setEdges, setNodes]
   );
 
   const undo = useCallback(() => {
     const prev = historyRef.current.pop();
     if (!prev) return;
     futureRef.current.push(cloneGraphState(graphRef.current));
-    setGraph(prev);
+    graphRef.current = prev;
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
     setEditingNodeId(null);
-  }, []);
+  }, [setEdges, setNodes]);
 
   const redo = useCallback(() => {
     const next = futureRef.current.pop();
     if (!next) return;
     historyRef.current.push(cloneGraphState(graphRef.current));
-    setGraph(next);
+    graphRef.current = next;
+    setNodes(next.nodes);
+    setEdges(next.edges);
     setEditingNodeId(null);
-  }, []);
+  }, [setEdges, setNodes]);
 
   const applyAutoLayout = useCallback(async (state: GraphState) => {
     const laidOut = await applyDagreLayout(state.nodes, state.edges);
-    setGraph((current) => {
-      if (current !== state) return current;
-      return { ...current, nodes: laidOut };
-    });
-  }, []);
+    const next = { ...state, nodes: laidOut };
+    graphRef.current = next;
+    setNodes(next.nodes);
+    setEdges(next.edges);
+  }, [setEdges, setNodes]);
 
   useEffect(() => {
     if (hasInitializedRef.current) {
@@ -847,10 +856,12 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     historyRef.current = [];
     futureRef.current = [];
     nodeCounterRef.current = 1;
-    setGraph(initialGraph);
+    graphRef.current = initialGraph;
+    setNodes(initialGraph.nodes);
+    setEdges(initialGraph.edges);
     setEditingNodeId(null);
     void applyAutoLayout(initialGraph);
-  }, [initialGraph, applyAutoLayout]);
+  }, [initialGraph, applyAutoLayout, setEdges, setNodes]);
 
   useEffect(() => {
     if (!command) return;
@@ -871,7 +882,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
       reactFlow.fitView({ padding: 0.2, duration: 250 });
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [graph.nodes, graph.edges, reactFlow]);
+  }, [nodes, edges, reactFlow]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
