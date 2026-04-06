@@ -1,6 +1,7 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import { FiMoon, FiMousePointer, FiPlusCircle, FiSun } from "react-icons/fi";
+import { FaAws } from "react-icons/fa";
 import { Box, Database, GitBranch, Monitor, Server, Zap } from "lucide-react";
 import ReactFlow, {
   applyEdgeChanges,
@@ -569,13 +570,19 @@ function FallbackIcon({ type }: { type: string }) {
 function TechnologyIcon({ label, kind, type, icon }: { label: string; kind: FlowNodeKind; type: string; icon?: string }) {
   const [hasImageError, setHasImageError] = useState(false);
   const hasExplicitIcon = Boolean(icon && icon !== "auto");
-  const explicitUrl = hasExplicitIcon ? getIconUrl(icon) : null;
+  const explicitIconName = hasExplicitIcon ? normalizeLabel(icon ?? "") : null;
+  const explicitUrl = explicitIconName ? getIconUrl(explicitIconName) : null;
   const inferred = hasExplicitIcon ? null : inferIconFromLabel(label);
+  const resolvedIconName = explicitIconName || inferred || undefined;
   const iconUrl = explicitUrl || getIconUrl(inferred ?? undefined);
 
   useEffect(() => {
     setHasImageError(false);
   }, [icon, label]);
+
+  if (resolvedIconName === "aws") {
+    return <FaAws className="arch-node-icon" size={16} />;
+  }
 
   if (iconUrl && !hasImageError) {
     return (
