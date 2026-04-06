@@ -1142,6 +1142,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
         cacheBust: true,
         backgroundColor: theme === "dark" ? "#0f172a" : "#ffffff",
         filter: (node) => !node.classList?.contains("toolbar"),
+        fontEmbedCSS: "",
       });
       const link = document.createElement("a");
       link.href = dataUrl;
