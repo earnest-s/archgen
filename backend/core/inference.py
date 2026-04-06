@@ -76,6 +76,27 @@ def _validate_architecture(payload: dict) -> dict:
     return {"nodes": normalized_nodes, "edges": normalized_edges}
 
 
+def _tokenize_prompt(prompt: str) -> object:
+    try:
+        chat_prompt = _TOKENIZER.apply_chat_template(
+            [
+                {
+                    "role": "system",
+                    "content": "You are a strict JSON generator for software architecture graphs.",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        return _TOKENIZER(chat_prompt, return_tensors="pt").to(_MODEL_DEVICE)
+    except Exception:  # noqa: BLE001
+        return _TOKENIZER(prompt, return_tensors="pt").to(_MODEL_DEVICE)
+
+
 def _load_model_once() -> None:
     global _MODEL, _TOKENIZER, _MODEL_DEVICE
 
@@ -183,26 +204,37 @@ Description:
 ONLY return JSON.
 """
 
-    inputs = _TOKENIZER(prompt, return_tensors="pt").to(_MODEL_DEVICE)
+    attempts = 1 if deterministic else 3
+    last_error = ""
+    last_result = ""
 
-    with torch.inference_mode():
-        outputs = _MODEL.generate(
-            **inputs,
-            max_new_tokens=300,
-            temperature=0.3,
-            top_p=0.9,
-            do_sample=not deterministic,
-            eos_token_id=_TOKENIZER.eos_token_id,
-            pad_token_id=_TOKENIZER.eos_token_id,
-        )
+    for attempt in range(1, attempts + 1):
+        inputs = _tokenize_prompt(prompt)
+        generation_kwargs = {
+            "max_new_tokens": 300,
+            "do_sample": not deterministic,
+            "eos_token_id": _TOKENIZER.eos_token_id,
+            "pad_token_id": _TOKENIZER.eos_token_id,
+        }
+        if not deterministic:
+            generation_kwargs.update({"temperature": 0.3, "top_p": 0.9})
 
-    input_len = inputs.input_ids.shape[1]
-    generated_ids = outputs[:, input_len:]
-    result = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
+        with torch.inference_mode():
+            outputs = _MODEL.generate(**inputs, **generation_kwargs)
 
-    print("RAW MODEL OUTPUT:", result[:500])
+        input_len = inputs.input_ids.shape[1]
+        generated_ids = outputs[:, input_len:]
+        result = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
+        last_result = result
+        print(f"RAW MODEL OUTPUT [attempt {attempt}/{attempts}]:", result[:500])
 
-    architecture = _validate_architecture(_extract_json_object(result))
-    print("OUTPUT LENGTH:", len(result))
-    print("GPU MEMORY:", torch.cuda.memory_allocated() / 1024**2, "MB")
-    return architecture, result
+        try:
+            architecture = _validate_architecture(_extract_json_object(result))
+            print("OUTPUT LENGTH:", len(result))
+            print("GPU MEMORY:", torch.cuda.memory_allocated() / 1024**2, "MB")
+            return architecture, result
+        except ValueError as exc:
+            last_error = str(exc)
+            continue
+
+    raise ValueError(f"Architecture generation failed after {attempts} attempts: {last_error}. Last output: {last_result[:300]}")
