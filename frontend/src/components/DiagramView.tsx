@@ -1078,6 +1078,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
 
   const onNodeDragStop = useCallback(
     (_: React.MouseEvent, draggedNode: Node<NodeData>) => {
+      setIsDraggingNode(false);
       if (draggedNode.type === "containerNode") return;
 
       applyGraphChange((current) => {
@@ -1128,8 +1129,12 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     [applyGraphChange]
   );
 
+  const onNodeDragStart = useCallback(() => {
+    setIsDraggingNode(true);
+  }, []);
+
   const onExportJson = () => {
-    const payload = JSON.stringify({ nodes: graph.nodes, edges: graph.edges }, null, 2);
+    const payload = JSON.stringify({ nodes, edges }, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1208,8 +1213,8 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     }
   };
 
-  const selectedNode = graph.nodes.find((node) => node.selected);
-  const selectedEdge = graph.edges.find((edge) => edge.selected);
+  const selectedNode = nodes.find((node) => node.selected);
+  const selectedEdge = edges.find((edge) => edge.selected);
 
   const updateSelectedNodeLabel = (label: string) => {
     if (!selectedNode) return;
@@ -1247,7 +1252,34 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
     }));
   };
 
-  const rendered = withCallbacks(graph);
+  const commitEdgeEditor = useCallback(() => {
+    if (!edgeEditor) return;
+    const clean = edgeEditor.value.trim();
+    if (!clean) {
+      setEdgeEditor(null);
+      return;
+    }
+    const edgeType = normalizeProtocol(clean);
+    const lineStyle: EdgeLine = edgeType === "Async" ? "async" : "sync";
+    applyGraphChange((current) => ({
+      ...current,
+      edges: current.edges.map((edge) =>
+        edge.id === edgeEditor.edgeId ? createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle) : edge
+      ),
+    }));
+    setEdgeEditor(null);
+  }, [applyGraphChange, edgeEditor]);
+
+  const deleteEdgeEditorTarget = useCallback(() => {
+    if (!edgeEditor) return;
+    applyGraphChange((current) => ({
+      ...current,
+      edges: current.edges.filter((edge) => edge.id !== edgeEditor.edgeId),
+    }));
+    setEdgeEditor(null);
+  }, [applyGraphChange, edgeEditor]);
+
+  const rendered = withCallbacks({ nodes, edges });
 
   return (
     <div className="diagram-editor">
