@@ -989,8 +989,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
         const exists = current.edges.some((e) => e.source === connection.source && e.target === connection.target);
         if (exists) return current;
 
-        const suggested = protocolFromKinds(sourceNode, targetNode);
-        const chosen = normalizeProtocol(window.prompt("Edge type: HTTP, gRPC, Async, Cache, DB Query, request", suggested));
+        const chosen = protocolFromKinds(sourceNode, targetNode);
         const lineStyle: EdgeLine = chosen === "Async" ? "async" : "sync";
 
         const edge = createEdge(`e${Date.now()}`, connection.source, connection.target, chosen, lineStyle);
