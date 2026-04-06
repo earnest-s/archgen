@@ -1,6 +1,7 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import { FiBox, FiDatabase, FiGlobe, FiLayers, FiMoon, FiMousePointer, FiPlusCircle, FiServer, FiSun, FiZap } from "react-icons/fi";
+import { Box, Database, GitBranch, Monitor, Server, Zap } from "lucide-react";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -64,6 +65,11 @@ type NodeData = {
   kind: FlowNodeKind;
   type: string;
   icon?: string;
+  style?: {
+    background?: string;
+    borderColor?: string;
+    textColor?: string;
+  };
   editing?: boolean;
   onStartEdit?: (nodeId: string) => void;
   onCommitLabel?: (nodeId: string, label: string) => void;
@@ -71,8 +77,14 @@ type NodeData = {
 };
 
 type EdgeData = {
+  label?: string;
   edgeType: EdgeProtocol;
   lineStyle: EdgeLine;
+  style?: {
+    stroke?: string;
+    width?: number;
+    dashed?: boolean;
+  };
 };
 
 type GraphState = {
@@ -93,27 +105,31 @@ const CONTAINER_HEIGHT = 230;
 const DEFAULT_NODE_WIDTH = 150;
 const DEFAULT_NODE_HEIGHT = 40;
 
-const ICON_OPTIONS = ["postgres", "redis", "kafka", "docker", "nginx", "react", "node", "aws", "generic"] as const;
+const ICON_OPTIONS = ["auto", "postgres", "redis", "kafka", "docker", "nginx", "react", "node", "aws", "generic"] as const;
 type IconOption = (typeof ICON_OPTIONS)[number];
 
-const iconUrlMap: Record<Exclude<IconOption, "generic">, string> = {
-  postgres: "https://cdn.simpleicons.org/postgresql",
-  redis: "https://cdn.simpleicons.org/redis",
-  kafka: "https://cdn.simpleicons.org/apachekafka",
-  docker: "https://cdn.simpleicons.org/docker",
-  nginx: "https://cdn.simpleicons.org/nginx",
-  react: "https://cdn.simpleicons.org/react",
-  node: "https://cdn.simpleicons.org/nodedotjs",
-  aws: "https://cdn.simpleicons.org/amazonaws",
+const ICON_MAP: Record<string, string> = {
+  postgres: "postgresql",
+  aws: "amazonaws",
+  gcp: "googlecloud",
+  azure: "microsoftazure",
+  node: "nodedotjs",
+  react: "react",
+  docker: "docker",
+  redis: "redis",
+  kafka: "apachekafka",
+  nginx: "nginx",
 };
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function iconUrlForOption(icon: string | undefined): string | null {
-  if (!icon || icon === "generic") return null;
-  return iconUrlMap[icon as Exclude<IconOption, "generic">] ?? null;
+function getIconUrl(iconName: string | undefined): string | null {
+  if (!iconName || iconName === "auto" || iconName === "generic") return null;
+  const slug = ICON_MAP[iconName.toLowerCase()];
+  if (!slug) return null;
+  return `https://cdn.simpleicons.org/${slug}`;
 }
 
 function inferIconFromLabel(label: string): IconOption | null {
@@ -252,6 +268,14 @@ function getProtocolVisual(_edgeType: EdgeProtocol, lineStyle: EdgeLine): {
   };
 }
 
+function buildEdgeStyle(style: EdgeData["style"] | undefined, lineStyle: EdgeLine): React.CSSProperties {
+  return {
+    stroke: style?.stroke || "var(--edge-color)",
+    strokeWidth: style?.width ?? 2,
+    strokeDasharray: style?.dashed || lineStyle === "async" ? "5 5" : undefined,
+  };
+}
+
 function protocolFromKinds(source: Node<NodeData> | undefined, target: Node<NodeData> | undefined): EdgeProtocol {
   if (!source || !target) return "request";
   const targetCat = categoryForKind(target.data.kind);
@@ -365,7 +389,8 @@ function createEdge(
   source: string,
   target: string,
   edgeType: EdgeProtocol,
-  lineStyle: EdgeLine
+  lineStyle: EdgeLine,
+  customStyle?: EdgeData["style"]
 ): Edge<EdgeData> {
   const visual = getProtocolVisual(edgeType, lineStyle);
   return {
@@ -375,9 +400,14 @@ function createEdge(
     type: "smoothstep",
     className: "arch-edge",
     markerEnd: { type: MarkerType.ArrowClosed, width: 18, height: 18, color: "var(--edge-color)" },
-    data: { edgeType, lineStyle },
+    data: {
+      edgeType,
+      lineStyle,
+      label: edgeType,
+      style: customStyle,
+    },
     label: edgeType,
-    style: visual.style,
+    style: { ...visual.style, ...buildEdgeStyle(customStyle, lineStyle) },
     labelStyle: visual.labelStyle,
     labelBgStyle: visual.labelBgStyle,
     labelBgBorderRadius: 4,
@@ -395,7 +425,7 @@ function dedupeEdges(edges: Edge<EdgeData>[]): Edge<EdgeData>[] {
     seen.add(key);
     const edgeType = edge.data?.edgeType ?? "request";
     const lineStyle = edge.data?.lineStyle ?? (edgeType === "Async" ? "async" : "sync");
-    out.push(createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle));
+    out.push(createEdge(edge.id, edge.source, edge.target, edgeType, lineStyle, edge.data?.style));
   });
   return out;
 }
