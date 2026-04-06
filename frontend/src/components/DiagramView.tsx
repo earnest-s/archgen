@@ -399,6 +399,7 @@ function buildHierarchyEdges(nodes: Node<NodeData>[]): Edge<EdgeData>[] {
   const services = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "service");
   const databases = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "database");
   const caches = nodes.filter((node) => toCanonicalCategory(node.data.kind) === "cache");
+  const queues = nodes.filter((node) => node.data.kind === "queue");
 
   const edges: Edge<EdgeData>[] = [];
   let id = 1;
@@ -410,7 +411,10 @@ function buildHierarchyEdges(nodes: Node<NodeData>[]): Edge<EdgeData>[] {
     databases.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "DB Query", "sync")));
   });
   services.forEach((src) => {
-    caches.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "Queue", "async")));
+    queues.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "Async", "async")));
+  });
+  services.forEach((src) => {
+    caches.forEach((dst) => edges.push(createEdge(`e${id++}`, src.id, dst.id, "Cache", "sync")));
   });
 
   return dedupeEdges(edges);
@@ -429,7 +433,7 @@ function buildEdgesFromArchitecture(nodes: Node<NodeData>[], architecture: Archi
 
       const label = typeof edge.label === "string" ? edge.label : undefined;
       const edgeType = normalizeProtocol(label ?? protocolFromKinds(sourceNode, targetNode));
-      const lineStyle: EdgeLine = edgeType === "Queue" ? "async" : "sync";
+      const lineStyle: EdgeLine = edgeType === "Async" ? "async" : "sync";
       return createEdge(`e${index + 1}`, edge.source, edge.target, edgeType, lineStyle);
     })
     .filter((edge): edge is Edge<EdgeData> => edge !== null)
