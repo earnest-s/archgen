@@ -581,7 +581,7 @@ const nodeTypes = {
   containerNode: ContainerNode,
 };
 
-function DiagramViewInner({ architecture, command }: DiagramViewProps) {
+function DiagramViewInner({ architecture, command, theme, onToggleTheme }: DiagramViewProps) {
   const reactFlow = useReactFlow<NodeData, EdgeData>();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -589,6 +589,7 @@ function DiagramViewInner({ architecture, command }: DiagramViewProps) {
   const initialGraph = useMemo(() => buildInitialGraph(architecture), [architecture]);
   const [graph, setGraph] = useState<GraphState>(initialGraph);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [toolMode, setToolMode] = useState<ToolMode>("select");
   const historyRef = useRef<GraphState[]>([]);
   const futureRef = useRef<GraphState[]>([]);
   const graphRef = useRef(graph);
