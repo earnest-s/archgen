@@ -566,27 +566,52 @@ function cloneGraphState(state: GraphState): GraphState {
   };
 }
 
-function getFallbackIcon(type: string) {
+function FallbackIcon({ type }: { type: string }) {
   const normalizedType = normalizeLabel(type);
-  if (normalizedType === "ui") return FiGlobe;
-  if (normalizedType === "database" || normalizedType === "db") return FiDatabase;
-  if (normalizedType === "cache") return FiZap;
-  if (normalizedType === "queue") return FiLayers;
-  if (normalizedType === "container") return FiBox;
-  if (normalizedType === "gateway") return FiBox;
-  return FiServer;
+  if (normalizedType === "ui") return <Monitor className="arch-node-icon" size={16} />;
+  if (normalizedType === "database" || normalizedType === "db") return <Database className="arch-node-icon" size={16} />;
+  if (normalizedType === "queue") return <GitBranch className="arch-node-icon" size={16} />;
+  if (normalizedType === "cache") return <Zap className="arch-node-icon" size={16} />;
+  if (normalizedType === "container") return <Box className="arch-node-icon" size={16} />;
+  return <Server className="arch-node-icon" size={16} />;
 }
 
 function TechnologyIcon({ label, kind, type, icon }: { label: string; kind: FlowNodeKind; type: string; icon?: string }) {
-  const iconKey = icon || inferIconFromLabel(label) || undefined;
-  const iconUrl = iconUrlForOption(iconKey);
+  const [hasImageError, setHasImageError] = useState(false);
+  const inferred = inferIconFromLabel(label);
+  const iconUrl = getIconUrl(icon) || getIconUrl(inferred ?? undefined);
 
-  if (!iconUrl) {
-    const FallbackIcon = getFallbackIcon(type || kind);
-    return <FallbackIcon className="arch-node-icon" size={16} />;
+  useEffect(() => {
+    setHasImageError(false);
+  }, [icon, label]);
+
+  if (iconUrl && !hasImageError) {
+    return (
+      <img
+        className="arch-node-logo"
+        src={iconUrl}
+        alt={label}
+        width={16}
+        height={16}
+        loading="lazy"
+        decoding="async"
+        onError={(event) => {
+          event.currentTarget.style.display = "none";
+          setHasImageError(true);
+        }}
+      />
+    );
   }
 
-  return <img className="arch-node-logo" src={iconUrl} alt={label} width={16} height={16} loading="lazy" decoding="async" />;
+  return <FallbackIcon type={type || kind} />;
+}
+
+function nodeInlineStyle(data: NodeData): React.CSSProperties {
+  return {
+    background: data.style?.background || "var(--node-default-bg)",
+    borderColor: data.style?.borderColor || "var(--node-default-border)",
+    color: data.style?.textColor || "var(--node-default-text)",
+  };
 }
 
 function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
@@ -599,7 +624,7 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
   };
 
   return (
-    <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
+    <div className={`arch-node ${selected ? "selected" : ""}`} style={nodeInlineStyle(data)} onDoubleClick={() => data.onStartEdit?.(id)}>
       <Handle type="target" position={Position.Top} />
       <TechnologyIcon label={data.label} kind={data.kind} type={data.type} icon={data.icon} />
       {data.editing ? (
@@ -645,7 +670,7 @@ function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
   const commit = () => data.onCommitLabel?.(id, draft);
 
   return (
-    <div className={`arch-container ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
+    <div className={`arch-container ${selected ? "selected" : ""}`} style={nodeInlineStyle(data)} onDoubleClick={() => data.onStartEdit?.(id)}>
       <div className="arch-container-header">
         <TechnologyIcon label={data.label} kind={data.kind} type={data.type} icon={data.icon} />
         {data.editing ? (
