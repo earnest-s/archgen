@@ -357,7 +357,7 @@ function buildNodeFromTemplate(template: EditorNodeType, id: string, position: {
     return {
       id,
       type: "containerNode",
-      data: { label: id, kind, type: kind },
+      data: { label: id, kind, type: kind, style: {} },
       position,
       style: { width: CONTAINER_WIDTH, height: CONTAINER_HEIGHT },
       draggable: true,
@@ -368,7 +368,7 @@ function buildNodeFromTemplate(template: EditorNodeType, id: string, position: {
   return {
     id,
     type: toFlowNodeType(kind),
-    data: { label: id, kind, type: kind },
+    data: { label: id, kind, type: kind, style: {} },
     position,
     draggable: true,
     selectable: true,
@@ -441,7 +441,7 @@ function buildNodesFromArchitecture(architecture: Architecture): Node<NodeData>[
     grouped[layer].push({
       id: node.id,
       type: toFlowNodeType(kind),
-      data: { label: node.id, kind, type: kind },
+      data: { label: node.id, kind, type: kind, style: {} },
       position: { x: 0, y: layerY[layer] },
       draggable: true,
       selectable: true,
@@ -767,6 +767,7 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             label: clean,
             kind,
             type: kind,
+            style: node.data.style,
             editing: false,
             onStartEdit,
             onCommitLabel,
@@ -1183,6 +1184,9 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             icon: typeof (node as { data?: { icon?: unknown } }).data?.icon === "string"
               ? String((node as { data?: { icon?: unknown } }).data?.icon)
               : undefined,
+            style: typeof (node as { data?: { style?: unknown } }).data?.style === "object" && (node as { data?: { style?: unknown } }).data?.style !== null
+              ? (node as { data?: { style?: { background?: string; borderColor?: string; textColor?: string } } }).data?.style
+              : {},
           };
           return built;
         })
