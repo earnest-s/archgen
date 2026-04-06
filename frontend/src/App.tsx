@@ -33,7 +33,6 @@ type EditorCommand = {
 
 function App() {
   const [input, setInput] = useState(defaultText);
-  const [output, setOutput] = useState("");
   const [architecture, setArchitecture] = useState<Architecture | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,7 +51,6 @@ function App() {
 
   const onGenerate = async () => {
     setError("");
-    setOutput("");
     setArchitecture(null);
 
     const text = input.trim();
@@ -90,7 +88,6 @@ function App() {
 
       const data = (await response.json()) as { architecture?: unknown; raw_model_output?: string };
       console.log("API RESPONSE:", data);
-      setOutput(data.raw_model_output ?? "");
 
       const arch = data.architecture as { nodes?: unknown; edges?: unknown } | undefined;
       const isValid =
@@ -132,6 +129,10 @@ function App() {
           {loading ? "Generating..." : "Generate From Prompt"}
         </button>
 
+          <p className="status-line">
+            {loading ? "Generating architecture..." : architecture ? "Architecture generated successfully." : "Ready to generate."}
+          </p>
+
         <div className="tool-section">
           <h2>Node Tools</h2>
           <p className="sub">Drag an item onto the canvas to create a node.</p>
@@ -150,11 +151,6 @@ function App() {
         </div>
 
         {error ? <p className="error">{error}</p> : null}
-
-        <div className="output">
-          <h2>Raw Model Output</h2>
-          <pre>{output || "No output yet."}</pre>
-        </div>
       </aside>
 
       <section className="editor-canvas-panel">
