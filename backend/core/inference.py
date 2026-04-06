@@ -126,6 +126,25 @@ def preload_model() -> None:
     _load_model_once()
 
 
+def run_startup_smoke_test() -> None:
+    _load_model_once()
+    prompt = "Return exactly this JSON and nothing else: {\"status\":\"ready\"}"
+    inputs = _TOKENIZER(prompt, return_tensors="pt").to(_MODEL_DEVICE)
+    with torch.inference_mode():
+        outputs = _MODEL.generate(
+            **inputs,
+            max_new_tokens=40,
+            do_sample=False,
+            eos_token_id=_TOKENIZER.eos_token_id,
+            pad_token_id=_TOKENIZER.eos_token_id,
+        )
+    input_len = inputs.input_ids.shape[1]
+    generated_ids = outputs[:, input_len:]
+    smoke = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
+    if not smoke:
+        raise RuntimeError("Startup smoke inference returned empty output")
+
+
 def generate_architecture(text: str, deterministic: bool = False) -> tuple[dict, str]:
     _load_model_once()
     clean_text = text.strip()
@@ -141,9 +160,22 @@ Convert this description into a JSON graph.
 
 STRICT FORMAT:
 {{
-  "nodes": [{{"id": "...", "type": "ui|service|database|cache|queue|container"}}],
-  "edges": [{{"source": "...", "target": "...", "label": "..."}}]
+    "nodes": [
+        {{"id": "frontend", "type": "ui"}},
+        {{"id": "api", "type": "service"}},
+        {{"id": "postgres", "type": "database"}}
+    ],
+    "edges": [
+        {{"source": "frontend", "target": "api", "label": "HTTP"}},
+        {{"source": "api", "target": "postgres", "label": "DB Query"}}
+    ]
 }}
+
+RULES:
+- nodes must be an array of objects
+- edges must be an array of objects
+- node type must be one of: ui, service, database, cache, queue, container
+- edge source/target must reference node ids
 
 Description:
 {clean_text}
