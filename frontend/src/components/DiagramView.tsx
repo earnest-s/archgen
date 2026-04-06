@@ -1,6 +1,6 @@
 import { ChangeEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
-import { FiBox, FiMoon, FiMove, FiMousePointer, FiPlusCircle, FiSun, FiTrash2 } from "react-icons/fi";
+import { FiBox, FiDatabase, FiHardDrive, FiLayers, FiMonitor, FiMoon, FiMove, FiMousePointer, FiPackage, FiPlusCircle, FiServer, FiSun, FiTrash2 } from "react-icons/fi";
 import ReactFlow, {
   applyEdgeChanges,
   applyNodeChanges,
@@ -101,20 +101,18 @@ const CONTAINER_HEIGHT = 230;
 const DEFAULT_NODE_WIDTH = 150;
 const DEFAULT_NODE_HEIGHT = 40;
 
-const iconMap: Record<string, string> = {
-  docker: "docker",
-  postgresql: "postgres",
-  postgres: "postgres",
-  mysql: "mysql",
-  mongodb: "mongodb",
-  redis: "redis",
-  nginx: "nginx",
-  kafka: "kafka",
-  react: "react",
-  nodejs: "node",
-  node: "node",
-  fastapi: "fastapi",
-};
+const simpleIconMatchers: Array<{ keywords: string[]; icon: keyof typeof simpleIconMap }> = [
+  { keywords: ["postgresql", "postgres", "pgsql"], icon: "postgres" },
+  { keywords: ["mysql", "mariadb"], icon: "mysql" },
+  { keywords: ["mongodb", "mongo"], icon: "mongodb" },
+  { keywords: ["redis", "memcached", "cache"], icon: "redis" },
+  { keywords: ["kafka", "rabbitmq", "sqs", "queue", "broker"], icon: "kafka" },
+  { keywords: ["nginx", "gateway", "proxy", "ingress"], icon: "nginx" },
+  { keywords: ["react", "frontend", "client", "web", "ui"], icon: "react" },
+  { keywords: ["nodejs", "node", "express", "nestjs"], icon: "node" },
+  { keywords: ["fastapi", "api", "backend", "service"], icon: "fastapi" },
+  { keywords: ["docker", "container", "kubernetes", "k8s", "pod"], icon: "docker" },
+];
 
 const simpleIconMap = {
   docker: siDocker,
@@ -186,9 +184,12 @@ function nodeThemeClass(kind: FlowNodeKind): string {
 
 function getIconKey(label: string): keyof typeof simpleIconMap | null {
   const normalized = normalizeLabel(label);
-  if (iconMap[normalized]) return iconMap[normalized] as keyof typeof simpleIconMap;
-  const key = Object.keys(iconMap).find((item) => normalized.includes(item));
-  return key ? (iconMap[key] as keyof typeof simpleIconMap) : null;
+  for (const matcher of simpleIconMatchers) {
+    if (matcher.keywords.some((keyword) => normalized === keyword || normalized.includes(keyword))) {
+      return matcher.icon;
+    }
+  }
+  return null;
 }
 
 function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
@@ -498,9 +499,21 @@ function cloneGraphState(state: GraphState): GraphState {
   };
 }
 
-function TechnologyIcon({ label }: { label: string }) {
+function getFallbackIcon(kind: FlowNodeKind) {
+  if (kind === "ui") return FiMonitor;
+  if (kind === "database") return FiDatabase;
+  if (kind === "cache") return FiHardDrive;
+  if (kind === "queue") return FiLayers;
+  if (kind === "container") return FiPackage;
+  return FiServer;
+}
+
+function TechnologyIcon({ label, kind }: { label: string; kind: FlowNodeKind }) {
   const key = getIconKey(label);
-  if (!key) return <FiBox className="arch-node-icon" size={16} />;
+  if (!key) {
+    const FallbackIcon = getFallbackIcon(kind);
+    return <FallbackIcon className="arch-node-icon" size={16} />;
+  }
 
   const icon = simpleIconMap[key];
   return (
@@ -521,7 +534,7 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-node ${nodeThemeClass(data.kind)} ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
       <Handle type="target" position={Position.Top} />
-      <TechnologyIcon label={data.label} />
+      <TechnologyIcon label={data.label} kind={data.kind} />
       {data.editing ? (
         <input
           className="arch-node-input nodrag nowheel"
@@ -552,7 +565,7 @@ function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
   return (
     <div className={`arch-container ${selected ? "selected" : ""}`} onDoubleClick={() => data.onStartEdit?.(id)}>
       <div className="arch-container-header">
-        <TechnologyIcon label={data.label} />
+        <TechnologyIcon label={data.label} kind={data.kind} />
         {data.editing ? (
           <input
             className="arch-node-input nodrag nowheel"
