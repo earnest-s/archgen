@@ -97,7 +97,7 @@ def _validate_architecture(payload: dict) -> dict:
         raise ValueError("Architecture JSON must include at least one node and one edge")
 
     normalized_nodes: list[dict[str, str]] = []
-    node_ids: set[str] = set()
+    node_types_by_id: dict[str, str] = {}
     for node in nodes:
         node_id = None
         node_type = None
@@ -131,12 +131,19 @@ def _validate_architecture(payload: dict) -> dict:
         normalized_type = candidate_type
         if normalized_type not in _ALLOWED_NODE_TYPES:
             raise ValueError("Each node must include a valid 'type'")
-        if normalized_id in node_ids:
-            raise ValueError(f"Duplicate node id '{normalized_id}'")
-        node_ids.add(normalized_id)
+
+        # Remove duplicate nodes by id (keep first occurrence).
+        if normalized_id in node_types_by_id:
+            continue
+        node_types_by_id[normalized_id] = normalized_type
         normalized_nodes.append({"id": normalized_id, "type": normalized_type})
 
+    normalized_nodes = normalized_nodes[:8]
+    allowed_ids = {node["id"] for node in normalized_nodes}
+    node_types_by_id = {node["id"]: node["type"] for node in normalized_nodes}
+
     normalized_edges: list[dict[str, str]] = []
+    seen_edges: set[tuple[str, str]] = set()
     for edge in edges:
         source = None
         target = None
@@ -154,12 +161,40 @@ def _validate_architecture(payload: dict) -> dict:
 
         if not isinstance(source, str) or not isinstance(target, str):
             raise ValueError("Each edge must include string 'source' and 'target'")
-        if source not in node_ids or target not in node_ids:
-            raise ValueError("Edge source/target must reference known node ids")
-        normalized_edge = {"source": source, "target": target}
-        if isinstance(label, str) and label.strip():
-            normalized_edge["label"] = label.strip()
-        normalized_edges.append(normalized_edge)
+
+        source_id = source.strip()
+        target_id = target.strip()
+
+        # Remove self-loops.
+        if source_id == target_id:
+            continue
+
+        # Drop edges that reference missing nodes.
+        if source_id not in allowed_ids or target_id not in allowed_ids:
+            continue
+
+        # Remove duplicate edges by (source, target).
+        edge_key = (source_id, target_id)
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+
+        edge_label = _infer_edge_label(
+            node_types_by_id[source_id],
+            node_types_by_id[target_id],
+            label if isinstance(label, str) else None,
+        )
+        normalized_edges.append({"source": source_id, "target": target_id, "label": edge_label})
+
+        if len(normalized_edges) >= 10:
+            break
+
+    if len(normalized_edges) == 0:
+        raise ValueError("Architecture JSON must include at least one valid edge")
+
+    # Performance guardrails.
+    if len(normalized_nodes) > 10 or len(normalized_edges) > 15:
+        raise ValueError("Generated graph exceeds production limits")
 
     return {"nodes": normalized_nodes, "edges": normalized_edges}
 
