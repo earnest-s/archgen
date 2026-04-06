@@ -182,7 +182,19 @@ function nodeThemeClass(kind: FlowNodeKind): string {
   return "arch-node-service";
 }
 
-function getIconKey(label: string): keyof typeof simpleIconMap | null {
+function getIconKey(label: string, kind: FlowNodeKind): keyof typeof simpleIconMap | null {
+  if (kind === "ui") return "react";
+  if (kind === "queue") return "kafka";
+  if (kind === "cache") return "redis";
+  if (kind === "container") return "docker";
+  if (kind === "gateway") return "nginx";
+  if (kind === "database") {
+    const databaseLabel = normalizeLabel(label);
+    if (databaseLabel.includes("mysql") || databaseLabel.includes("mariadb")) return "mysql";
+    if (databaseLabel.includes("mongo")) return "mongodb";
+    return "postgres";
+  }
+
   const normalized = normalizeLabel(label);
   for (const matcher of simpleIconMatchers) {
     if (matcher.keywords.some((keyword) => normalized === keyword || normalized.includes(keyword))) {
@@ -505,11 +517,12 @@ function getFallbackIcon(kind: FlowNodeKind) {
   if (kind === "cache") return FiHardDrive;
   if (kind === "queue") return FiLayers;
   if (kind === "container") return FiPackage;
+  if (kind === "gateway") return FiBox;
   return FiServer;
 }
 
 function TechnologyIcon({ label, kind }: { label: string; kind: FlowNodeKind }) {
-  const key = getIconKey(label);
+  const key = getIconKey(label, kind);
   if (!key) {
     const FallbackIcon = getFallbackIcon(kind);
     return <FallbackIcon className="arch-node-icon" size={16} />;
