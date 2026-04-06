@@ -289,6 +289,30 @@ def run_startup_smoke_test() -> None:
         raise RuntimeError("Startup smoke inference returned empty output")
 
 
+def _is_structurally_weak_graph(architecture: dict) -> bool:
+    nodes = architecture.get("nodes", [])
+    edges = architecture.get("edges", [])
+    if len(nodes) == 0 or len(edges) == 0:
+        return True
+
+    degrees: dict[str, int] = {
+        node["id"]: 0
+        for node in nodes
+        if isinstance(node, dict) and isinstance(node.get("id"), str)
+    }
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        src = edge.get("source")
+        dst = edge.get("target")
+        if isinstance(src, str) and src in degrees:
+            degrees[src] += 1
+        if isinstance(dst, str) and dst in degrees:
+            degrees[dst] += 1
+
+    return any(degree == 0 for degree in degrees.values())
+
+
 def generate_architecture(text: str, deterministic: bool = False) -> tuple[dict, str]:
     _load_model_once()
     clean_text = text.strip()
@@ -297,67 +321,93 @@ def generate_architecture(text: str, deterministic: bool = False) -> tuple[dict,
     print("INPUT:", clean_text)
     print("RUNNING REAL MODEL")
 
-    prompt = f"""
-You are a system architect.
+        prompt = f"""
+You are a senior software architect.
 
-Convert this description into a JSON graph.
+Convert the following system description into a CLEAN architecture graph.
 
-STRICT FORMAT:
+RULES:
+- Use only meaningful components
+- No duplicate edges
+- No redundant connections
+- Keep architecture minimal and logical
+
+FORMAT:
 {{
     "nodes": [
         {{"id": "frontend", "type": "ui"}},
-        {{"id": "api", "type": "service"}},
-        {{"id": "postgres", "type": "database"}}
+        {{"id": "api", "type": "service"}}
     ],
     "edges": [
-        {{"source": "frontend", "target": "api", "label": "HTTP"}},
-        {{"source": "api", "target": "postgres", "label": "DB Query"}}
+        {{"source": "frontend", "target": "api", "label": "HTTP"}}
     ]
 }}
 
-RULES:
-- nodes must be an array of objects
-- edges must be an array of objects
-- node type must be one of: ui, service, database, cache, queue, container
-- edge source/target must reference node ids
+CONSTRAINTS:
+- Each edge must be unique
+- Do NOT repeat same connection
+- Use proper labels: HTTP, DB Query, Async, Cache
+- Max nodes: 8
+- Max edges: 10
 
 Description:
 {clean_text}
 
-ONLY return JSON.
+ONLY return JSON. No explanation.
 """
+
+        stricter_prompt = prompt + "\nGenerate a connected architecture graph. All nodes must be part of a valid flow."
 
     attempts = 1 if deterministic else 3
     last_error = ""
     last_result = ""
+    started_at = time.perf_counter()
 
-    for attempt in range(1, attempts + 1):
-        inputs = _tokenize_prompt(prompt)
-        generation_kwargs = {
-            "max_new_tokens": 300,
-            "do_sample": not deterministic,
-            "eos_token_id": _TOKENIZER.eos_token_id,
-            "pad_token_id": _TOKENIZER.eos_token_id,
-        }
-        if not deterministic:
-            generation_kwargs.update({"temperature": 0.3, "top_p": 0.9})
+    def _run_attempts(prompt_text: str, attempt_count: int) -> tuple[dict, str] | None:
+        nonlocal last_error, last_result
+        for attempt in range(1, attempt_count + 1):
+            inputs = _tokenize_prompt(prompt_text)
+            generation_kwargs = {
+                "max_new_tokens": 300,
+                "do_sample": not deterministic,
+                "eos_token_id": _TOKENIZER.eos_token_id,
+                "pad_token_id": _TOKENIZER.eos_token_id,
+            }
+            if not deterministic:
+                generation_kwargs.update({"temperature": 0.3, "top_p": 0.9})
 
-        with torch.inference_mode():
-            outputs = _MODEL.generate(**inputs, **generation_kwargs)
+            with torch.inference_mode():
+                outputs = _MODEL.generate(**inputs, **generation_kwargs)
 
-        input_len = inputs.input_ids.shape[1]
-        generated_ids = outputs[:, input_len:]
-        result = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
-        last_result = result
-        print(f"RAW MODEL OUTPUT [attempt {attempt}/{attempts}]:", result[:500])
+            input_len = inputs.input_ids.shape[1]
+            generated_ids = outputs[:, input_len:]
+            result = _TOKENIZER.decode(generated_ids[0], skip_special_tokens=True).strip()
+            last_result = result
+            print(f"RAW MODEL OUTPUT [attempt {attempt}/{attempt_count}]:", result[:500])
 
-        try:
-            architecture = _validate_architecture(_extract_json_object(result))
-            print("OUTPUT LENGTH:", len(result))
-            print("GPU MEMORY:", torch.cuda.memory_allocated() / 1024**2, "MB")
-            return architecture, result
-        except ValueError as exc:
-            last_error = str(exc)
-            continue
+            try:
+                architecture = _validate_architecture(_extract_json_object(result))
+                if _is_structurally_weak_graph(architecture):
+                    raise ValueError("Generated graph is structurally weak")
 
-    raise ValueError(f"Architecture generation failed after {attempts} attempts: {last_error}. Last output: {last_result[:300]}")
+                elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+                print("INFERENCE TIME MS:", elapsed_ms)
+                print("NODE COUNT:", len(architecture["nodes"]))
+                print("EDGE COUNT:", len(architecture["edges"]))
+                print("OUTPUT LENGTH:", len(result))
+                print("GPU MEMORY:", torch.cuda.memory_allocated() / 1024**2, "MB")
+                return architecture, result
+            except ValueError as exc:
+                last_error = str(exc)
+                continue
+        return None
+
+    primary_result = _run_attempts(prompt, attempts)
+    if primary_result is not None:
+        return primary_result
+
+    connected_result = _run_attempts(stricter_prompt, 1)
+    if connected_result is not None:
+        return connected_result
+
+    raise ValueError(f"Architecture generation failed after {attempts + 1} attempts: {last_error}. Last output: {last_result[:300]}")
