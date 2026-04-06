@@ -621,6 +621,7 @@ function TechnologyIcon({ label, kind }: { label: string; kind: FlowNodeKind }) 
 
 function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
   const [draft, setDraft] = useState(data.label);
+  const skipBlurCommitRef = useRef(false);
   useEffect(() => setDraft(data.label), [data.label]);
 
   const commit = () => {
@@ -636,10 +637,24 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
           className="arch-node-input nodrag nowheel"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
+          onBlur={() => {
+            if (skipBlurCommitRef.current) {
+              skipBlurCommitRef.current = false;
+              return;
+            }
+            commit();
+          }}
           onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
             if (event.key === "Enter") {
               commit();
+              return;
+            }
+            if (event.key === "Escape") {
+              event.preventDefault();
+              skipBlurCommitRef.current = true;
+              setDraft(data.label);
+              data.onCancelEdit?.();
+              (event.currentTarget as HTMLInputElement).blur();
             }
           }}
           autoFocus
@@ -654,6 +669,7 @@ function NodeShell({ id, data, selected }: NodeProps<NodeData>) {
 
 function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
   const [draft, setDraft] = useState(data.label);
+  const skipBlurCommitRef = useRef(false);
   useEffect(() => setDraft(data.label), [data.label]);
 
   const commit = () => data.onCommitLabel?.(id, draft);
@@ -667,9 +683,25 @@ function ContainerNode({ id, data, selected }: NodeProps<NodeData>) {
             className="arch-node-input nodrag nowheel"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            onBlur={commit}
+            onBlur={() => {
+              if (skipBlurCommitRef.current) {
+                skipBlurCommitRef.current = false;
+                return;
+              }
+              commit();
+            }}
             onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
-              if (event.key === "Enter") commit();
+              if (event.key === "Enter") {
+                commit();
+                return;
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                skipBlurCommitRef.current = true;
+                setDraft(data.label);
+                data.onCancelEdit?.();
+                (event.currentTarget as HTMLInputElement).blur();
+              }
             }}
             autoFocus
           />
