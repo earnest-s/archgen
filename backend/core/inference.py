@@ -40,10 +40,18 @@ def _validate_architecture(payload: dict) -> dict:
     normalized_nodes: list[dict[str, str]] = []
     node_ids: set[str] = set()
     for node in nodes:
-        if not isinstance(node, dict):
-            raise ValueError("Each node must be an object")
-        node_id = node.get("id")
-        node_type = node.get("type")
+        node_id = None
+        node_type = None
+
+        if isinstance(node, dict):
+            node_id = node.get("id")
+            node_type = node.get("type")
+        elif isinstance(node, str):
+            compact = node.strip().lower()
+            if compact in _ALLOWED_NODE_TYPES:
+                node_id = compact
+                node_type = compact
+
         if not isinstance(node_id, str) or not node_id.strip():
             raise ValueError("Each node must include a non-empty string 'id'")
         if not isinstance(node_type, str):
@@ -59,11 +67,20 @@ def _validate_architecture(payload: dict) -> dict:
 
     normalized_edges: list[dict[str, str]] = []
     for edge in edges:
-        if not isinstance(edge, dict):
-            raise ValueError("Each edge must be an object")
-        source = edge.get("source")
-        target = edge.get("target")
-        label = edge.get("label")
+        source = None
+        target = None
+        label = None
+
+        if isinstance(edge, dict):
+            source = edge.get("source")
+            target = edge.get("target")
+            label = edge.get("label")
+        elif isinstance(edge, list) and len(edge) >= 2:
+            source = edge[0]
+            target = edge[1]
+            if len(edge) >= 3:
+                label = edge[2]
+
         if not isinstance(source, str) or not isinstance(target, str):
             raise ValueError("Each edge must include string 'source' and 'target'")
         if source not in node_ids or target not in node_ids:
