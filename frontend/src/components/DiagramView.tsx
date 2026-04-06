@@ -169,6 +169,11 @@ function toCanonicalCategory(kind: FlowNodeKind): "ui" | "service" | "database" 
   return "service";
 }
 
+function categoryForKind(kind: FlowNodeKind): "ui" | "service" | "database" | "cache" | "queue" {
+  if (kind === "queue") return "queue";
+  return toCanonicalCategory(kind);
+}
+
 function nodeThemeClass(kind: FlowNodeKind): string {
   if (kind === "ui") return "arch-node-ui";
   if (kind === "database") return "arch-node-database";
@@ -179,11 +184,11 @@ function nodeThemeClass(kind: FlowNodeKind): string {
   return "arch-node-service";
 }
 
-function getIconUrl(label: string): string | null {
+function getIconKey(label: string): keyof typeof simpleIconMap | null {
   const normalized = normalizeLabel(label);
-  if (iconMap[normalized]) return iconMap[normalized];
+  if (iconMap[normalized]) return iconMap[normalized] as keyof typeof simpleIconMap;
   const key = Object.keys(iconMap).find((item) => normalized.includes(item));
-  return key ? iconMap[key] : null;
+  return key ? (iconMap[key] as keyof typeof simpleIconMap) : null;
 }
 
 function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
@@ -191,7 +196,7 @@ function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
   labelStyle: React.CSSProperties;
   labelBgStyle: React.CSSProperties;
 } {
-  const baseColor = edgeType === "HTTP" ? "#2563eb" : edgeType === "Queue" ? "#7c3aed" : "#64748b";
+  const baseColor = edgeType === "HTTP" ? "#2563eb" : edgeType === "DB Query" ? "#ea580c" : edgeType === "Async" ? "#7c3aed" : edgeType === "Cache" ? "#0d9488" : "#64748b";
   return {
     style: {
       stroke: baseColor,
@@ -214,9 +219,10 @@ function getProtocolVisual(edgeType: EdgeProtocol, lineStyle: EdgeLine): {
 
 function protocolFromKinds(source: Node<NodeData> | undefined, target: Node<NodeData> | undefined): EdgeProtocol {
   if (!source || !target) return "request";
-  const targetCat = toCanonicalCategory(target.data.kind);
+  const targetCat = categoryForKind(target.data.kind);
   if (targetCat === "database") return "DB Query";
-  if (targetCat === "cache") return "Queue";
+  if (targetCat === "queue") return "Async";
+  if (targetCat === "cache") return "Cache";
   return "HTTP";
 }
 
@@ -224,7 +230,8 @@ function normalizeProtocol(value: string | null | undefined): EdgeProtocol {
   const normalized = (value ?? "").trim().toLowerCase();
   if (normalized === "http") return "HTTP";
   if (normalized === "grpc") return "gRPC";
-  if (normalized === "queue") return "Queue";
+  if (normalized === "queue" || normalized === "async") return "Async";
+  if (normalized === "cache") return "Cache";
   if (normalized === "db query" || normalized === "db") return "DB Query";
   if (normalized === "request") return "request";
   return "request";
