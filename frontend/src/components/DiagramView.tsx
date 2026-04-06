@@ -1080,12 +1080,21 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
             <span className="menu-title">File</span>
             <button type="button" className="menu-btn" onClick={onExportJson}>Export JSON</button>
             <button type="button" className="menu-btn" onClick={() => importInputRef.current?.click()}>Import JSON</button>
+            <button type="button" className="menu-btn" onClick={onExportPng}>Export PNG</button>
             <button type="button" className="menu-btn danger" onClick={() => applyGraphChange(() => ({ nodes: [], edges: [] }))}>Clear Diagram</button>
           </div>
           <div className="menu-group">
             <span className="menu-title">Edit</span>
+            <button type="button" className="menu-btn" onClick={() => void applyAutoLayout(graphRef.current)}>Auto Layout</button>
             <button type="button" className="menu-btn" onClick={undo}>Undo</button>
             <button type="button" className="menu-btn" onClick={redo}>Redo</button>
+          </div>
+          <div className="menu-group">
+            <button type="button" className={`menu-btn icon-btn ${toolMode === "select" ? "active" : ""}`} title="Select" onClick={() => setToolMode("select")}><FiMousePointer /></button>
+            <button type="button" className={`menu-btn icon-btn ${toolMode === "connect" ? "active" : ""}`} title="Connect" onClick={() => setToolMode("connect")}><FiPlusCircle /></button>
+            <button type="button" className={`menu-btn icon-btn ${toolMode === "delete" ? "active" : ""}`} title="Delete" onClick={() => setToolMode("delete")}><FiTrash2 /></button>
+            <button type="button" className={`menu-btn icon-btn ${toolMode === "pan" ? "active" : ""}`} title="Pan" onClick={() => setToolMode("pan")}><FiMove /></button>
+            <button type="button" className="menu-btn icon-btn" title="Light / Dark" onClick={onToggleTheme}>{theme === "dark" ? <FiSun /> : <FiMoon />}</button>
           </div>
         </div>
 
@@ -1097,11 +1106,13 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeClick={onNodeClick}
+          onEdgeClick={onEdgeClick}
           onNodeDragStop={onNodeDragStop}
           nodeTypes={nodeTypes}
           fitView
-          nodesDraggable
-          panOnDrag
+          nodesDraggable={toolMode !== "pan"}
+          panOnDrag={toolMode === "pan" || toolMode === "select"}
           zoomOnScroll
           zoomOnPinch
           zoomOnDoubleClick
@@ -1118,14 +1129,46 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
           <Controls showInteractive />
         </ReactFlow>
       </div>
+
+      <aside className="property-panel">
+        <h3>Properties</h3>
+        {selectedNode ? (
+          <div className="prop-block">
+            <h4>Node</h4>
+            <label>Label</label>
+            <input className="prop-input" value={selectedNode.data.label} onChange={(event) => updateSelectedNodeLabel(event.target.value)} />
+            <label>Type</label>
+            <select className="prop-input" value={selectedNode.data.kind} onChange={(event) => updateSelectedNodeKind(event.target.value as FlowNodeKind)}>
+              <option value="ui">ui</option>
+              <option value="service">service</option>
+              <option value="database">database</option>
+              <option value="cache">cache</option>
+              <option value="queue">queue</option>
+              <option value="container">container</option>
+            </select>
+            <label>Color Preview</label>
+            <div className={`prop-color-preview ${nodeThemeClass(selectedNode.data.kind)}`} />
+          </div>
+        ) : null}
+
+        {selectedEdge ? (
+          <div className="prop-block">
+            <h4>Edge</h4>
+            <label>Label / Type</label>
+            <input className="prop-input" value={String(selectedEdge.label ?? selectedEdge.data?.edgeType ?? "HTTP")} onChange={(event) => updateSelectedEdgeType(event.target.value)} />
+          </div>
+        ) : null}
+
+        {!selectedNode && !selectedEdge ? <p className="prop-empty">Select a node or edge to edit properties.</p> : null}
+      </aside>
     </div>
   );
 }
 
-export default function DiagramView({ architecture, command }: DiagramViewProps) {
+export default function DiagramView({ architecture, command, theme, onToggleTheme }: DiagramViewProps) {
   return (
     <ReactFlowProvider>
-      <DiagramViewInner architecture={architecture} command={command} />
+      <DiagramViewInner architecture={architecture} command={command} theme={theme} onToggleTheme={onToggleTheme} />
     </ReactFlowProvider>
   );
 }
