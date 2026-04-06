@@ -914,6 +914,14 @@ function DiagramViewInner({ architecture, command, theme, onToggleTheme }: Diagr
         });
       }
 
+      if (ctrlMeta && key === "a") {
+        event.preventDefault();
+        applyGraphChange((current) => ({
+          ...current,
+          nodes: current.nodes.map((node) => ({ ...node, selected: true })),
+        }), { recordHistory: false });
+      }
+
       if (ctrlMeta && key === "d") {
         event.preventDefault();
         applyGraphChange((current) => {
