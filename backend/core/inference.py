@@ -321,7 +321,7 @@ def generate_architecture(text: str, deterministic: bool = False) -> tuple[dict,
     print("INPUT:", clean_text)
     print("RUNNING REAL MODEL")
 
-        prompt = f"""
+    prompt = f"""
 You are a senior software architect.
 
 Convert the following system description into a CLEAN architecture graph.
@@ -356,7 +356,7 @@ Description:
 ONLY return JSON. No explanation.
 """
 
-        stricter_prompt = prompt + "\nGenerate a connected architecture graph. All nodes must be part of a valid flow."
+    stricter_prompt = prompt + "\nGenerate a connected architecture graph. All nodes must be part of a valid flow."
 
     attempts = 1 if deterministic else 3
     last_error = ""
