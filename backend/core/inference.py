@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 import time
 
 import torch
@@ -19,10 +20,13 @@ _NODE_TYPE_ALIASES = {
 _LABEL_ALIASES = {
     "request": "HTTP",
     "http": "HTTP",
+    "https": "HTTP",
     "db": "DB Query",
     "db query": "DB Query",
+    "sql": "DB Query",
     "async": "Async",
     "cache": "Cache",
+    "redis": "Cache",
 }
 
 
@@ -46,21 +50,58 @@ def _derive_type_from_id(node_id: str) -> str | None:
 
 
 def _extract_json_object(raw_text: str) -> dict:
+    cleaned = raw_text.strip()
+    cleaned = cleaned.replace("```json", "").replace("```JSON", "").replace("```", "").strip()
+    cleaned = _strip_json_line_comments(cleaned)
+
     decoder = json.JSONDecoder()
-    first_object: dict | None = None
-    for start in (idx for idx, ch in enumerate(raw_text) if ch == "{"):
+    for start in (idx for idx, ch in enumerate(cleaned) if ch == "{"):
         try:
-            parsed, _ = decoder.raw_decode(raw_text[start:])
+            parsed, _ = decoder.raw_decode(cleaned[start:])
         except json.JSONDecodeError:
             continue
         if isinstance(parsed, dict):
-            if first_object is None:
-                first_object = parsed
             if "nodes" in parsed and "edges" in parsed:
                 return parsed
-    if first_object is not None:
-        return first_object
-    raise ValueError("Model output did not contain a valid JSON object")
+    raise ValueError("Model output did not contain a complete architecture JSON object")
+
+
+def _strip_json_line_comments(text: str) -> str:
+    # Remove // comments outside of JSON strings.
+    out: list[str] = []
+    in_string = False
+    escape = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+
+        if in_string:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+
+        if ch == "/" and i + 1 < len(text) and text[i + 1] == "/":
+            i += 2
+            while i < len(text) and text[i] != "\n":
+                i += 1
+            continue
+
+        out.append(ch)
+        i += 1
+
+    return re.sub(r",\s*([}\]])", r"\1", "".join(out))
 
 
 def _normalize_label(label: str | None) -> str | None:
@@ -106,10 +147,11 @@ def _validate_architecture(payload: dict) -> dict:
             node_id = node.get("id")
             node_type = node.get("type")
         elif isinstance(node, str):
-            compact = node.strip().lower()
-            if compact in _ALLOWED_NODE_TYPES:
+            compact = node.strip()
+            if compact:
                 node_id = compact
-                node_type = compact
+                inferred_from_id = _derive_type_from_id(compact)
+                node_type = inferred_from_id if inferred_from_id is not None else "service"
 
         if not isinstance(node_id, str) or not node_id.strip():
             raise ValueError("Each node must include a non-empty string 'id'")
@@ -119,18 +161,15 @@ def _validate_architecture(payload: dict) -> dict:
             candidate_type = _NODE_TYPE_ALIASES.get(node_type.strip().lower(), node_type.strip().lower())
             if candidate_type == "component":
                 inferred = _derive_type_from_id(normalized_id)
-                if inferred is None:
-                    raise ValueError("Each node must include a valid 'type'")
-                candidate_type = inferred
+                candidate_type = inferred if inferred is not None else "service"
         else:
             inferred = _derive_type_from_id(normalized_id)
-            if inferred is None:
-                raise ValueError("Each node must include a valid 'type'")
-            candidate_type = inferred
+            candidate_type = inferred if inferred is not None else "service"
 
         normalized_type = candidate_type
         if normalized_type not in _ALLOWED_NODE_TYPES:
-            raise ValueError("Each node must include a valid 'type'")
+            inferred_fallback = _derive_type_from_id(normalized_id)
+            normalized_type = inferred_fallback if inferred_fallback is not None else "service"
 
         # Remove duplicate nodes by id (keep first occurrence).
         if normalized_id in node_types_by_id:
