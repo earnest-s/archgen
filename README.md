@@ -1,6 +1,6 @@
-# archgen
+# ArchGen
 
-archgen is a local-first architecture generation and editing workspace.
+ArchGen is a local-first architecture generation and editing workspace.
 
 It combines:
 - A FastAPI backend that runs local model inference and returns architecture JSON.
